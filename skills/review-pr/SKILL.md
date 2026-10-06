@@ -183,7 +183,7 @@ Report each class as a located finding, none found in inspected scope, or unchec
 | Class | Check |
 |---|---|
 | Dead code | Live callers/arguments/configuration; meaningful mutation or actual consumer reachability. |
-| Brittle regex parsing | Structured alternative; realistic near-miss spelling, formatting, scale and source shapes. |
+| Values parsed out of text | **Blocks.** A regex (or substring test) that reads a value out of prose, a human-edited document, or a string the system wrote itself is a design defect, not a parser to harden. Name the structured input that should carry it (a typed field written by a validating CLI, or a model read bound to a verbatim quote). Never ask for more near-miss cases: each round of hardening fits the examples in view. |
 | Unjustified quantitative bounds | Measured rationale, population near the boundary, identity versus mere plausibility. |
 | Overengineering | Callers, existing owner, machinery cost and what a simpler shape would lose. |
 | Module proliferation | How many files must change one decision; coherent module concerns versus split-for-size. |
