@@ -105,6 +105,17 @@ text when the runtime supports messages. Do not export unrelated/private payload
   acceptance, wall-time limit, output path and stop behavior before launch.
   Model budget flags are request-stop thresholds, not exact billing ceilings.
   Pair runtime time limits with an outer process timeout where available.
+- **Every handoff needs the owner's approval of its brief, before launch.**
+  Owner 2026-10-06: "all handoffs need to be approved by me ... with specific
+  implementation details/plans so i would have caught the regex bullshit". Show
+  the brief itself, not a summary: the owner's words it serves, the existing
+  code/pattern it extends or replaces (file:line), the concrete design (data
+  shapes, where each value comes from, which function changes), what is
+  explicitly out of scope, and how the result is checked. A design that reads a
+  value out of prose, or a string the system wrote itself, is named as such so
+  the owner can reject it. This covers review fix rounds, rebases and follow-up
+  fixes too: a BLOCKED verdict is reported and stops; the next brief waits for
+  approval. Keep proposing ideas; only launches wait.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
