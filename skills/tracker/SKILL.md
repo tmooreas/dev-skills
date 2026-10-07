@@ -116,6 +116,15 @@ text when the runtime supports messages. Do not export unrelated/private payload
   the owner can reject it. This covers review fix rounds, rebases and follow-up
   fixes too: a BLOCKED verdict is reported and stops; the next brief waits for
   approval. Keep proposing ideas; only launches wait.
+- Every implementer brief requires the repository's own dev checks, run and
+  pasted into the result file: the reuse inventory for each new helper or
+  constant (datapack-agent: `dev/tools/inventory.py --grep <name>`), the PR size
+  check (`dev/check_pr_size.py`), and the focused tests. A brief without them is
+  incomplete; a result without their output is NOT_REVIEWED.
+- Every CLI worker brief says: run every command in the foreground; never
+  background a test or probe. A one-shot worker's background jobs die with its
+  session, and it exits "waiting" with nothing committed (seen four times,
+  2026-10-05..07). A result without its result file is NOT_REVIEWED; resume it.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
