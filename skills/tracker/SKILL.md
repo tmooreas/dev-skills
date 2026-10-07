@@ -125,6 +125,26 @@ text when the runtime supports messages. Do not export unrelated/private payload
   constant (datapack-agent: `dev/tools/inventory.py --grep <name>`), the PR size
   check (`dev/check_pr_size.py`), and the focused tests. A brief without them is
   incomplete; a result without their output is NOT_REVIEWED.
+- Speed rules (owner 2026-10-07, "feels like we're going very slow"):
+  - **Self-review before review.** Every implementer brief requires a pass
+    against review-pr's red flags and the fail-closed rules before committing:
+    malformed / falsey / missing input refused, nothing accepted then silently
+    ignored, every produced fact recorded, no value read from text. The result
+    file lists each check and its outcome.
+  - **Focused tests locally, CI for the rest.** Workers run only the focused
+    tests (Linux venv for non-Excel tests where available); CI on the exact head
+    is the full-suite gate. No local full-suite runs unless CI cannot cover it.
+  - **Merge with notes.** A reviewer's non-blocking notes become follow-up items
+    in the ledger, not another review round; only blocking findings block.
+  - **Batch briefs.** Keep the next briefs approved ahead so no slot waits on a
+    reply.
+- **Smoke before the owner sees it** (owner 2026-10-07: "dont bring me shit u
+  havent tested"). Before telling the owner a PR is ready, the orchestrator
+  itself runs the changed behavior on the exact head through the real entry
+  points (runners, not unit tests), including one refusal/failure path, reads
+  the produced artifacts, and shows that output. A reviewer PASS and green CI
+  are not a substitute; #203's refusal was recorded as not refused and both
+  missed it.
 - Every CLI worker brief says: never end your turn while any job of yours is
   still running. Run commands in the foreground; if the tool backgrounds one
   anyway (it does for long runs), call wait until it completes. A one-shot
