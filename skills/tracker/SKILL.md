@@ -125,10 +125,12 @@ text when the runtime supports messages. Do not export unrelated/private payload
   constant (datapack-agent: `dev/tools/inventory.py --grep <name>`), the PR size
   check (`dev/check_pr_size.py`), and the focused tests. A brief without them is
   incomplete; a result without their output is NOT_REVIEWED.
-- Every CLI worker brief says: run every command in the foreground; never
-  background a test or probe. A one-shot worker's background jobs die with its
-  session, and it exits "waiting" with nothing committed (seen four times,
-  2026-10-05..07). A result without its result file is NOT_REVIEWED; resume it.
+- Every CLI worker brief says: never end your turn while any job of yours is
+  still running. Run commands in the foreground; if the tool backgrounds one
+  anyway (it does for long runs), call wait until it completes. A one-shot
+  worker's background jobs die with its session, and it exits "waiting" with
+  nothing committed (seen five times, 2026-10-05..07, once despite a foreground
+  instruction). A result without its result file is NOT_REVIEWED; resume it.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
