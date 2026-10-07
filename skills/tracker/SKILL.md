@@ -117,9 +117,14 @@ text when the runtime supports messages. Do not export unrelated/private payload
   a category, a meaning read from text, a vocabulary or threshold) and who
   should decide it instead; "none" only after checking. Owner 2026-10-07, after
   #198's place-vocabulary check passed review: the model judges, code validates
-  typed values. This covers review fix rounds, rebases and follow-up
+  typed values. This covers review fix rounds and follow-up
   fixes too: a BLOCKED verdict is reported and stops; the next brief waits for
   approval. Keep proposing ideas; only launches wait.
+  **Exempt (owner 2026-10-07: "dont ask me to approve mechanical git stuff that
+  doesnt change anything"):** rebases/restacks with no behavior change, their
+  scoped rebase checks, pushes of already-approved work, retargets, CI reruns and
+  closing what the owner already decided to drop. Do them and report; stop and
+  ask only if a conflict needs a behavior choice.
 - Every implementer brief requires the repository's own dev checks, run and
   pasted into the result file: the reuse inventory for each new helper or
   constant (datapack-agent: `dev/tools/inventory.py --grep <name>`), the PR size
