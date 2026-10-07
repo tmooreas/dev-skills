@@ -97,7 +97,7 @@ text when the runtime supports messages. Do not export unrelated/private payload
 - Reuse existing sessions when useful, not indefinitely growing history. Start a
   bounded CLI job when no suitable live session exists and dispatch is authorized.
   Do not invent a message address or claim a handoff was accepted without evidence.
-- Default maximum **two simultaneous model jobs**, including implementers,
+- Default maximum **three simultaneous model jobs** (owner 2026-10-07), including implementers,
   reviewers, meta-auditors and mechanical executors. Tool-only/CI watchers do not
   count. No worker starts nested agents or model calls. Change bounds only with
   explicit task authority.
