@@ -131,6 +131,9 @@ text when the runtime supports messages. Do not export unrelated/private payload
   worker's background jobs die with its session, and it exits "waiting" with
   nothing committed (seen five times, 2026-10-05..07, once despite a foreground
   instruction). A result without its result file is NOT_REVIEWED; resume it.
+  Root cause found 2026-10-07: the workers were launched with a tool allowlist
+  that omitted `wait`, so a backgrounded job could not be waited on. Every
+  worker launch with a tool allowlist includes the runtime's wait tool.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
