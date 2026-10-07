@@ -239,6 +239,12 @@ small artifacts, not full transcripts through the orchestrator.
 Use a cheaper **mechanical executor** only for a predetermined, explicitly
 permitted git action. It is not a reviewer or substitute implementer. Normally
 the author merges; the owner may explicitly delegate mechanical execution.
+Model (owner 2026-10-07): **Sonnet 5.5** (`anthropic/claude-sonnet-5-5`) for clean
+rebases/restacks, pushes of approved heads, retargets, CI reruns/watching,
+closures already decided and owner-approved merges. It stops and hands back
+(Opus implementer) the moment a conflict touches logic or tests rather than
+imports/docs, or any test fails after the rebase. Range-diff, focused tests, the
+scoped rebase check and the orchestrator's smoke still follow.
 Run that executor asynchronously, bounded and isolated; a single serial batch
 avoids a third persistent per-PR session. Supply an exact PR/head allowlist,
 verified approval sources, required PASS/CI evidence, merge order and repository
