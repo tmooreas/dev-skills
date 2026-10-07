@@ -111,9 +111,13 @@ text when the runtime supports messages. Do not export unrelated/private payload
   the brief itself, not a summary: the owner's words it serves, the existing
   code/pattern it extends or replaces (file:line), the concrete design (data
   shapes, where each value comes from, which function changes), what is
-  explicitly out of scope, and how the result is checked. A design that reads a
-  value out of prose, or a string the system wrote itself, is named as such so
-  the owner can reject it. This covers review fix rounds, rebases and follow-up
+  explicitly out of scope, and how the result is checked. Every brief, and every
+  PR summary given to the owner for approval, carries a line **"Judgments in
+  code:"** listing each place the code decides what data means (a unit, a role,
+  a category, a meaning read from text, a vocabulary or threshold) and who
+  should decide it instead; "none" only after checking. Owner 2026-10-07, after
+  #198's place-vocabulary check passed review: the model judges, code validates
+  typed values. This covers review fix rounds, rebases and follow-up
   fixes too: a BLOCKED verdict is reported and stops; the next brief waits for
   approval. Keep proposing ideas; only launches wait.
 - Every implementer brief requires the repository's own dev checks, run and
