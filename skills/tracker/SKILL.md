@@ -97,7 +97,7 @@ text when the runtime supports messages. Do not export unrelated/private payload
 - Reuse existing sessions when useful, not indefinitely growing history. Start a
   bounded CLI job when no suitable live session exists and dispatch is authorized.
   Do not invent a message address or claim a handoff was accepted without evidence.
-- Default maximum **three simultaneous model jobs** (owner 2026-10-07), including implementers,
+- Default maximum **two simultaneous model jobs**, including implementers,
   reviewers, meta-auditors and mechanical executors. Tool-only/CI watchers do not
   count. No worker starts nested agents or model calls. Change bounds only with
   explicit task authority.
@@ -105,60 +105,17 @@ text when the runtime supports messages. Do not export unrelated/private payload
   acceptance, wall-time limit, output path and stop behavior before launch.
   Model budget flags are request-stop thresholds, not exact billing ceilings.
   Pair runtime time limits with an outer process timeout where available.
-- **Every handoff needs the owner's approval of its brief, before launch.**
-  Owner 2026-10-06: "all handoffs need to be approved by me ... with specific
-  implementation details/plans so i would have caught the regex bullshit". Show
-  the brief itself, not a summary: the owner's words it serves, the existing
-  code/pattern it extends or replaces (file:line), the concrete design (data
-  shapes, where each value comes from, which function changes), what is
-  explicitly out of scope, and how the result is checked. Every brief, and every
-  PR summary given to the owner for approval, carries a line **"Judgments in
-  code:"** listing each place the code decides what data means (a unit, a role,
-  a category, a meaning read from text, a vocabulary or threshold) and who
-  should decide it instead; "none" only after checking. Owner 2026-10-07, after
-  #198's place-vocabulary check passed review: the model judges, code validates
-  typed values. This covers review fix rounds and follow-up
-  fixes too: a BLOCKED verdict is reported and stops; the next brief waits for
-  approval. Keep proposing ideas; only launches wait.
-  **Exempt (owner 2026-10-07: "dont ask me to approve mechanical git stuff that
-  doesnt change anything"):** rebases/restacks with no behavior change, their
-  scoped rebase checks, pushes of already-approved work, retargets, CI reruns and
-  closing what the owner already decided to drop. Do them and report; stop and
-  ask only if a conflict needs a behavior choice.
-- Every implementer brief requires the repository's own dev checks, run and
-  pasted into the result file: the reuse inventory for each new helper or
-  constant (datapack-agent: `dev/tools/inventory.py --grep <name>`), the PR size
-  check (`dev/check_pr_size.py`), and the focused tests. A brief without them is
-  incomplete; a result without their output is NOT_REVIEWED.
-- Speed rules (owner 2026-10-07, "feels like we're going very slow"):
-  - **Self-review before review.** Every implementer brief requires a pass
-    against review-pr's red flags and the fail-closed rules before committing:
-    malformed / falsey / missing input refused, nothing accepted then silently
-    ignored, every produced fact recorded, no value read from text. The result
-    file lists each check and its outcome.
-  - **Focused tests locally, CI for the rest.** Workers run only the focused
-    tests (Linux venv for non-Excel tests where available); CI on the exact head
-    is the full-suite gate. No local full-suite runs unless CI cannot cover it.
-  - **Merge with notes.** A reviewer's non-blocking notes become follow-up items
-    in the ledger, not another review round; only blocking findings block.
-  - **Batch briefs.** Keep the next briefs approved ahead so no slot waits on a
-    reply.
-- **Smoke before the owner sees it** (owner 2026-10-07: "dont bring me shit u
-  havent tested"). Before telling the owner a PR is ready, the orchestrator
-  itself runs the changed behavior on the exact head through the real entry
-  points (runners, not unit tests), including one refusal/failure path, reads
-  the produced artifacts, and shows that output. A reviewer PASS and green CI
-  are not a substitute; #203's refusal was recorded as not refused and both
-  missed it.
 - Every CLI worker brief says: never end your turn while any job of yours is
-  still running. Run commands in the foreground; if the tool backgrounds one
-  anyway (it does for long runs), call wait until it completes. A one-shot
-  worker's background jobs die with its session, and it exits "waiting" with
-  nothing committed (seen five times, 2026-10-05..07, once despite a foreground
-  instruction). A result without its result file is NOT_REVIEWED; resume it.
-  Root cause found 2026-10-07: the workers were launched with a tool allowlist
-  that omitted `wait`, so a backgrounded job could not be waited on. Every
-  worker launch with a tool allowlist includes the runtime's wait tool.
+  still running; if the tool backgrounds a command, call wait until it completes.
+  Every worker launch with a tool allowlist includes the runtime's wait tool (a
+  worker without it exits "waiting" with nothing committed).
+- Launch workers detached from the orchestrator (a terminal multiplexer window
+  or a detached session), so an orchestrator restart does not kill them. Before
+  saying a worker is running or dead, check its process by its session file and
+  that file's last write, never a grep of process output; never resume a session
+  that may still be live (two workers on one worktree corrupt it).
+- Every brief that commits states the commit identity (author and committer);
+  rebases never run under a different repo-local user.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
@@ -239,12 +196,6 @@ small artifacts, not full transcripts through the orchestrator.
 Use a cheaper **mechanical executor** only for a predetermined, explicitly
 permitted git action. It is not a reviewer or substitute implementer. Normally
 the author merges; the owner may explicitly delegate mechanical execution.
-Model (owner 2026-10-07): **Sonnet 5.5** (`anthropic/claude-sonnet-5-5`) for clean
-rebases/restacks, pushes of approved heads, retargets, CI reruns/watching,
-closures already decided and owner-approved merges. It stops and hands back
-(Opus implementer) the moment a conflict touches logic or tests rather than
-imports/docs, or any test fails after the rebase. Range-diff, focused tests, the
-scoped rebase check and the orchestrator's smoke still follow.
 Run that executor asynchronously, bounded and isolated; a single serial batch
 avoids a third persistent per-PR session. Supply an exact PR/head allowlist,
 verified approval sources, required PASS/CI evidence, merge order and repository
@@ -298,6 +249,14 @@ tracker.py structural; changing a prose rule does not add script support or CI
 enforcement. For script changes use its behavioral tests/mutants. For skill-only
 changes smoke the installed skill loader/prompt builder and documented CLI help,
 without a paid model call. Record what actually loaded and any runtime limits.
+
+Project adapters: before applying this skill in a repository, look for
+`projects/<repository-name>.md` next to this file and read it. It holds only that
+project's specifics (its commands, bounds, model choices, owner rules and
+launch recipe); it adds to this skill and overrides it where it says so. Check it
+for drift each run (rules here it contradicts without saying so, commands that no
+longer exist) and report drift in one line. Generic improvements go in this file,
+never in an adapter.
 
 Updated 2026-10-05: provider-neutral bounded CLI orchestration, context discipline,
 PASS-only owner queue, independent delta audits and delegated mechanical git.
