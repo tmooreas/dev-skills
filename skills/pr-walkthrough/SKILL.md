@@ -14,12 +14,24 @@ Input: a PR number. Everything below is about that PR at its **current head**.
 
 ## Project adapter
 
-Before anything else, look for `projects/<repository-name>.md` next to this file. If it
-exists, read it: it names the project's status and diff commands, its proof sources,
-extra sections and extra antipatterns, and its safety limits. The adapter adds to this
-skill and overrides it where they conflict; the project's own CLAUDE.md or AGENTS.md
-overrides both. With no adapter, resolve commands and policy from the project's
-instructions.
+Before anything else, check the skill and find the adapter:
+
+1. **Is this skill current?** If this directory is inside a git checkout, run
+   `git -C <this dir> fetch -q` and `git -C <this dir> status -sb`. If it is behind its
+   upstream, fast-forward it (`git -C <this dir> pull --ff-only`) and re-read this file.
+   If it can't fast-forward (local changes, no network), say so in the walkthrough's
+   first line and continue with the version you have.
+2. **Read the adapter.** Look for `projects/<repository-name>.md` next to this file. If
+   it exists, read it: it names the project's status and diff commands, its proof
+   sources, extra sections and extra antipatterns, and its safety limits. The adapter
+   adds to this skill and overrides it where they conflict; the project's own CLAUDE.md
+   or AGENTS.md overrides both. With no adapter, resolve commands and policy from the
+   project's instructions.
+3. **Does the adapter still fit?** Check that every section number, heading and command
+   the adapter names still exists in this skill and the project. If one doesn't, say so
+   in the walkthrough's first line, follow this skill for that part, and propose the
+   adapter fix at the end. New general rules go in this file; project rules go in the
+   adapter. Never copy either into a project's own skills.
 
 ## Prepare (before writing a word)
 
