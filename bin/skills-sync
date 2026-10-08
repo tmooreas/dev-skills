@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Fast-forward this dev-skills checkout to its upstream before a skill runs.
+# Safe for several agent sessions at once: one sync at a time (flock), and it
+# only ever fast-forwards. It never merges, rebases, stashes, resets or discards.
+# It always exits 0 and prints one line, so a skill can run it unconditionally.
+set -u
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+lock="${XDG_RUNTIME_DIR:-${HOME}/.cache}/dev-skills-sync.lock"
+mkdir -p "$(dirname "$lock")"
+
+exec 9>"$lock"
+if ! flock -w 20 9; then
+  echo "skills-sync: another sync is running; using the installed version"
+  exit 0
+fi
+
+git_() { git -C "$repo" "$@"; }
+head_() { git_ rev-parse --short HEAD 2>/dev/null || echo unknown; }
+
+if ! timeout 20 git -C "$repo" fetch -q 2>/dev/null; then
+  echo "skills-sync: could not reach upstream; using $(head_)"
+  exit 0
+fi
+if ! git_ rev-parse -q --verify '@{u}' >/dev/null; then
+  echo "skills-sync: no upstream branch; using $(head_)"
+  exit 0
+fi
+behind="$(git_ rev-list --count 'HEAD..@{u}')"
+ahead="$(git_ rev-list --count '@{u}..HEAD')"
+if [ "$behind" = 0 ]; then
+  echo "skills-sync: up to date at $(head_)"
+  exit 0
+fi
+if [ -n "$(git_ status --porcelain --untracked-files=no)" ]; then
+  echo "skills-sync: $behind commits behind, but local edits are uncommitted; not updating (commit or push them first)"
+  exit 0
+fi
+if [ "$ahead" != 0 ]; then
+  echo "skills-sync: $behind behind and $ahead ahead of upstream; not updating (push or rebase by hand)"
+  exit 0
+fi
+before="$(head_)"
+if git_ merge -q --ff-only '@{u}' 2>/dev/null; then
+  echo "skills-sync: updated $before -> $(head_) ($behind commits)"
+else
+  echo "skills-sync: fast-forward failed; using $before"
+fi
+exit 0

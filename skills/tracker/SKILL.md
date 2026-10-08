@@ -6,12 +6,11 @@ description: Track and, when authorized, orchestrate repository work across any 
 # Tracker
 
 **Fresh skills.** Before running this skill, and before launching any worker that
-loads skills, bring the skills checkout up to date when it is a git checkout:
-`git -C <skills checkout> fetch -q` then `pull --ff-only`. Fast-forward only: on local
-changes, divergence or no network, keep the current version and say so in one line.
-Pulling is safe for running workers (each read its skills when it started); a worker
-launched afterwards gets the new text. Never pull while a local edit to the skills is
-uncommitted.
+loads skills, run `"$(git -C <this dir> rev-parse --show-toplevel)/bin/skills-sync"`.
+It only fast-forwards (never merges, stashes or discards), takes a lock so parallel
+sessions don't collide, and prints one line; if it did not update, say so and keep the
+current version. Pulling is safe for running workers (each read its skills when it
+started); a worker launched afterwards gets the new text.
 
 ## Source of truth and authority
 

@@ -94,3 +94,12 @@ They do not export tracker state, transcripts, credentials or cached dependencie
 Existing project installations are not overwritten by publication. Update this
 repository first and deliberately reconcile any local specialization; do not
 maintain another independent orchestration policy in a launch prompt.
+
+## Keeping installs current
+
+Every skill starts by running `bin/skills-sync`, which fast-forwards this checkout to its
+upstream. It takes a lock so parallel sessions don't collide, never merges, rebases,
+stashes or discards, refuses when there are uncommitted edits or local commits, and
+always exits 0 with one status line. Running sessions keep the text they already read;
+the next invocation reads the new version. New skills appear only in sessions started
+after the pull.

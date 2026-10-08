@@ -5,6 +5,14 @@ description: Reconcile open issues and active PRs with current code and owner pr
 
 # Issue-queue triage drill
 
+Before starting, bring the skills up to date by running:
+
+    "$(git -C <this dir> rev-parse --show-toplevel)/bin/skills-sync"
+
+It only fast-forwards, is safe beside other running sessions, and prints one line.
+If it updated, re-read this file; if it did not, say so in your first line and
+continue with the version you have.
+
 The deliverable is one recommended next action, its remaining dependency sequence
 and a current working issue map. Include independent work only when useful; don't
 fill a quota or begin implementation without authorization.

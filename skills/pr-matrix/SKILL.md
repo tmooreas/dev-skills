@@ -5,6 +5,14 @@ description: Rank the PRs that are ready to merge so the owner can approve the b
 
 # PR matrix
 
+Before starting, bring the skills up to date by running:
+
+    "$(git -C <this dir> rev-parse --show-toplevel)/bin/skills-sync"
+
+It only fast-forwards, is safe beside other running sessions, and prints one line.
+If it updated, re-read this file; if it did not, say so in your first line and
+continue with the version you have.
+
 The owner approves merges. This skill tells them what to approve first, in a
 table they can read without opening any PR.
 

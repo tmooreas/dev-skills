@@ -11,10 +11,13 @@ The deliverable is an independent exact-head verdict the owner can act on, a
 complete finding list with evidence, and a net-value call: worth it, worth it with
 a change, or not worth the burden.
 
-Before starting, if this skill's directory is in a git checkout, fast-forward it
-(`git -C <this dir> pull --ff-only -q`) and re-read this file; if it cannot
-fast-forward, say so in the verdict's first line and continue with the version you
-have.
+Before starting, bring the skills up to date by running:
+
+    "$(git -C <this dir> rev-parse --show-toplevel)/bin/skills-sync"
+
+It only fast-forwards, is safe beside other running sessions, and prints one line.
+If it updated, re-read this file; if it did not, say so in the verdict's first line and
+continue with the version you have.
 
 Read the target project's AGENTS.md, CLAUDE.md or equivalent instructions,
 architecture contracts, acceptance criteria and review rules first. Product

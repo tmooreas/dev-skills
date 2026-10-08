@@ -16,11 +16,10 @@ Input: a PR number. Everything below is about that PR at its **current head**.
 
 Before anything else, check the skill and find the adapter:
 
-1. **Is this skill current?** If this directory is inside a git checkout, run
-   `git -C <this dir> fetch -q` and `git -C <this dir> status -sb`. If it is behind its
-   upstream, fast-forward it (`git -C <this dir> pull --ff-only`) and re-read this file.
-   If it can't fast-forward (local changes, no network), say so in the walkthrough's
-   first line and continue with the version you have.
+1. **Is this skill current?** Run
+   `"$(git -C <this dir> rev-parse --show-toplevel)/bin/skills-sync"`. It only
+   fast-forwards and prints one line. If it updated, re-read this file; if it did not,
+   say so in the walkthrough's first line and continue with the version you have.
 2. **Read the adapter.** Look for `projects/<repository-name>.md` next to this file. If
    it exists, read it: it names the project's status and diff commands, its proof
    sources, extra sections and extra antipatterns, and its safety limits. The adapter
