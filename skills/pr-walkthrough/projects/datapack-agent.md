@@ -14,6 +14,10 @@ walkthrough starts no Excel and no Windows process; it reads existing Excel test
 runners on a copy of a deal in a temp folder, never in `Deals/` and never on a real
 deal's folder. No GitHub writes.
 
+## Memory (WSL out-of-memory crash, 2026-10-08)
+
+/tmp is a 7.7 GB RAM disk on this machine, shared with the esr project's agents. Scratch worktrees, venvs, temp deal copies and pytest's basetemp go under `~/scratch` (launch workers with `TMPDIR=~/scratch/tmp`), never /tmp. pytest runs with `-n 4` at most, never `-n auto`. Load one large workbook at a time. Smokes copy deals to `~/scratch`, not `/tmp`.
+
 ## Prepare
 
 - Status: `gh pr view N --repo American-Securities/datapack-agent --json headRefOid,baseRefName,isDraft,state,additions,deletions,statusCheckRollup,body`.

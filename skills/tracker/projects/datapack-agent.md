@@ -14,6 +14,10 @@ generic skill only with the owner's say-so.
   moment a conflict touches logic or tests, or a test fails after a rebase.
 - Commit identity: author and committer "Tom Moore" <tmoore@american-securities.com>.
 
+## Memory (WSL out-of-memory crash, 2026-10-08)
+
+/tmp is a 7.7 GB RAM disk on this machine, shared with the esr project's agents. Scratch worktrees, venvs, temp deal copies and pytest's basetemp go under `~/scratch` (launch workers with `TMPDIR=~/scratch/tmp`), never /tmp. pytest runs with `-n 4` at most, never `-n auto`. Load one large workbook at a time. Smokes copy deals to `~/scratch`, not `/tmp`.
+
 ## Launch recipe
 
 Workers run in tmux inside WSL (owner 2026-10-08), session `dpa`, one window per lane:
@@ -21,7 +25,7 @@ Workers run in tmux inside WSL (owner 2026-10-08), session `dpa`, one window per
 ```sh
 ~/dev-skills/bin/skills-sync
 tmux new-session -d -s dpa 2>/dev/null
-tmux new-window -d -t dpa -n <lane> "cd <cwd> && omp -p --model <model> --thinking medium \
+tmux new-window -d -t dpa -n <lane> "cd <cwd> && TMPDIR=~/scratch/tmp omp -p --model <model> --thinking medium \
   --mode text --no-title --no-pty --skills tracker,review-pr \
   --tools read,bash,grep,glob,lsp,edit,write,wait --auto-approve --max-time <n>m \
   --session-dir <dir> @<brief> 2>&1 | tee <lane>.out"
@@ -35,7 +39,7 @@ worker exited; its `.out` file and session hold the result.
 The generic skill's brief approval, mechanical-git exemption and smoke-before-owner
 gates apply. Here:
 - The smoke runs the real runners (`run_ingestion.py`, ideation, `run_excel_build.py`)
-  on a copy of a deal in a temp folder with `~/dpa/venv312`, never in `Deals/`.
+  on a copy of a deal under `~/scratch` with `~/dpa/venv312`, never in `Deals/` or /tmp.
 - Merges need the owner naming the PR; the executor rechecks head, base, CI and
   mergeability immediately before merging.
 - **Standing approval for run_cut slices** (owner 2026-10-08: "all these run cut ones are basically the same and i think we have the right scheme here so as long as there no scope creep i feel good about them"): a brief for a run_cut slice that follows the approved scheme (typed request validated against the cut's definition; keys as JSON objects of declared fields; layout emits key + cell kind; answers.py / run_cut.py reused; refusals with declared reasons; provisional before CP1) launches without asking. Anything beyond that scheme, or any scope creep, goes back to the owner. Merges still follow the walkthrough rule.
