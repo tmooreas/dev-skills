@@ -108,12 +108,19 @@ Keep each section short; the owner can ask for more.
    "clean" with the reason, or stop as above. Under "Judgments in code:", list each place
    the code decides something and who owns that decision.
    Then answer **"Is it overengineered?"** in a few lines, naming each piece you would
-   cut and what it costs to keep: anything built for a caller that doesn't exist yet
-   (declared ahead of its first user, a hook or option nothing passes), more types,
-   modules, layers or configuration than the one job needs, a general mechanism where
-   one direct call would do, a copy kept "for safety", or a test of machinery rather
-   than behaviour. Say what the simpler shape would be and what it would lose. "No"
-   needs a reason per piece that looks heavy, not a blanket answer.
+   cut and what it costs to keep. Look for:
+   - **too many modules:** new files, layers or indirection where an existing module or
+     one function would hold it;
+   - **hand-built machinery:** a registry, table of callbacks, mini-framework, parser,
+     cache or retry layer written in-house where a direct call, the standard library
+     or a maintained library does the job;
+   - **scope creep:** anything the brief and the owner's decision did not ask for,
+     however small or well meant, including "while I was here" fixes;
+   - anything built for a caller that doesn't exist yet (declared ahead of its first
+     user, a hook or option nothing passes), more types or configuration than the one
+     job needs, a copy kept "for safety", or a test of machinery rather than behaviour.
+   Say what the simpler shape would be and what it would lose. "No" needs a reason per
+   piece that looks heavy, not a blanket answer.
 10. **Limits and follow-ups:** known gaps, what is deliberately out of scope, what comes
     next and in which PR.
 11. **Size and order:** changed lines vs 800, what it is stacked on, what waits on it,
