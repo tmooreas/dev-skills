@@ -38,6 +38,9 @@ gates apply. Here:
   on a copy of a deal in a temp folder with `~/dpa/venv312`, never in `Deals/`.
 - Merges need the owner naming the PR; the executor rechecks head, base, CI and
   mergeability immediately before merging.
+- Never ask the owner to approve a merge before a full pr-walkthrough of that PR
+  (owner 2026-10-08). Once the owner has approved a PR, merge it when its gates pass;
+  do not ask again (a later restack with no behaviour change keeps the approval).
 
 ## Speed rules (2026-10-07)
 
