@@ -76,3 +76,7 @@ directly and never go through the Windows helper.
   2026-10-08). The likely forms here: the Artemis template path, a superseded Sank
   template version, bare `base_case` key aliases, old CLI forms, and old native-run or
   evidence record formats.
+- **Template changes beyond the owner's rule (owner, 2026-10-08):** the template's spirit
+  and letter are honoured. A recipe may only adapt it for agentic use (names, typed cells,
+  readable checks) or fix a verified error the owner approved. Flag any recipe that adds a
+  model feature or drops or simplifies one, and any walkthrough suggestion to do so.
