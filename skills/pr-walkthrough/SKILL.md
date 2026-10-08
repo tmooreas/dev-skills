@@ -107,6 +107,13 @@ Keep each section short; the owner can ask for more.
 9. **Antipattern check:** go through every item below, plus the adapter's, and say
    "clean" with the reason, or stop as above. Under "Judgments in code:", list each place
    the code decides something and who owns that decision.
+   Then answer **"Is it overengineered?"** in a few lines, naming each piece you would
+   cut and what it costs to keep: anything built for a caller that doesn't exist yet
+   (declared ahead of its first user, a hook or option nothing passes), more types,
+   modules, layers or configuration than the one job needs, a general mechanism where
+   one direct call would do, a copy kept "for safety", or a test of machinery rather
+   than behaviour. Say what the simpler shape would be and what it would lose. "No"
+   needs a reason per piece that looks heavy, not a blanket answer.
 10. **Limits and follow-ups:** known gaps, what is deliberately out of scope, what comes
     next and in which PR.
 11. **Size and order:** changed lines vs 800, what it is stacked on, what waits on it,
