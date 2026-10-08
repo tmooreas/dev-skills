@@ -19,6 +19,7 @@ generic skill only with the owner's say-so.
 Workers run in tmux inside WSL (owner 2026-10-08), session `dpa`, one window per lane:
 
 ```sh
+git -C ~/dev-skills pull -q --ff-only || echo "skills not updated: $(git -C ~/dev-skills status -sb | head -1)"
 tmux new-session -d -s dpa 2>/dev/null
 tmux new-window -d -t dpa -n <lane> "cd <cwd> && omp -p --model <model> --thinking medium \
   --mode text --no-title --no-pty --skills tracker,review-pr \
