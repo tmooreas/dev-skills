@@ -172,6 +172,16 @@ Check each item against the diff.
   asker (an extra comparison, statistics, a framework, an option, a generalization) is
   an antipattern: stop and propose cutting it, rather than walking it through or
   offering to keep it.
+- **Departing from a source we adopted:** when the project adopts someone else's artifact
+  (a model template, a spec, a reference implementation), it does what the source does.
+  Where the source's intent is unclear, ask the owner. Where its implementation is wrong
+  (it contradicts its own labels, structure or checks: a wrong reference, a hardcoded
+  value, a unit bug, a failing check), fix the implementation only, keeping its intent.
+  Adapting it to our tooling (names, typed inputs, readable checks) is allowed. Anything
+  else is an antipattern: a feature or convention the source lacks, "better" practice,
+  or simplifying or dropping one of its features. Classify each change to the source as
+  matches source / implementation fix (with evidence) / unclear (owner decides) /
+  beyond source (revert).
 
 ## Rules
 

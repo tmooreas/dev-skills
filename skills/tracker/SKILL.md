@@ -66,6 +66,12 @@ A skill invocation is not approval of any PR or a production action.
    formats, templates, commands or records. That holds unless a proven, stated
    customer need exists: who depends on the old form, and why they can't move.
    Replace the old path, delete it in the same change and migrate every caller.
+6. An adopted source (someone else's template, spec or reference implementation) is
+   followed as written. Task packets say so: do what the source does; ask the owner
+   where its intent is unclear; where its implementation is wrong (it contradicts its
+   own labels, structure or checks), fix the implementation only. Adaptation to our
+   tooling is allowed. No features, conventions, "better" practice or simplification
+   beyond the source without the owner's approval.
 
 ## Facts, ownership and ledger
 

@@ -76,7 +76,10 @@ directly and never go through the Windows helper.
   2026-10-08). The likely forms here: the Artemis template path, a superseded Sank
   template version, bare `base_case` key aliases, old CLI forms, and old native-run or
   evidence record formats.
-- **Template changes beyond the owner's rule (owner, 2026-10-08):** the template's spirit
-  and letter are honoured. A recipe may only adapt it for agentic use (names, typed cells,
-  readable checks) or fix a verified error the owner approved. Flag any recipe that adds a
-  model feature or drops or simplifies one, and any walkthrough suggestion to do so.
+- **Departing from Sank's template** (the shared "adopted source" item; owner,
+  2026-10-08): do what Sank's template does. Unclear intent goes to the owner. A wrong
+  implementation (a check fails, a wrong row, a hardcoded 0, a unit bug, `#REF!`) is
+  fixed, keeping his intent. Names, typed input cells, readable checks, and hidden
+  constants as inputs defaulting to his value are allowed. Flag any recipe that adds a
+  feature or convention (e.g. linear vesting, removed 2026-10-08), changes his behaviour
+  without an implementation error, or drops or simplifies one of his features.

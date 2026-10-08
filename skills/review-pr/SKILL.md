@@ -201,6 +201,7 @@ Report each class as a located finding, none found in inspected scope, or unchec
 | Overengineering | Callers, existing owner, machinery cost and what a simpler shape would lose. |
 | Module proliferation | How many files must change one decision; coherent module concerns versus split-for-size. |
 | Unneeded backward compatibility | On a greenfield project (no released product, or no consumer outside the team), any shim, alias, fallback, legacy reader, dual path or migration kept for the project's own earlier formats, templates, commands or records. It is allowed only with a proven, stated customer need: who depends on the old form, and why they can't move. Otherwise the old path is deleted in the same change and every caller migrated; spend no coding or review time keeping it alive. |
+| Departing from an adopted source | **Blocks** unless the owner approved it. When the project adopts someone else's artifact (a model template, a spec, a reference implementation), every change to it is one of: matches source; adaptation to our tooling; an implementation fix with evidence (it contradicts its own labels, structure or checks); or unclear intent the owner decided. A feature or convention the source lacks, "better" practice, or simplifying or dropping a source feature blocks. |
 
 Flags block only at the stated blocking bar. Keep the concrete simpler-shape and
 architecture-fit answers beside the net-value call; don't hide findings in prose.
