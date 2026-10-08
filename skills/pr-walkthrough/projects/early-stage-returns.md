@@ -16,7 +16,8 @@ directly and never go through the Windows helper.
 
 - Status: from `~/code/esr-tooling`, `uv run esr-dev pr status N`. Body, base and
   checks: `pr://N`. Diff: `pr://N/diff/all`, or `git diff <base>...<head>` in a scratch
-  worktree (`git worktree add --detach /tmp/walk-N-<sha7> <sha>`, removed at the end).
+  worktree on disk (`git worktree add --detach ~/scratch/walk-N-<sha7> <sha>`, removed at
+  the end); never /tmp, which is RAM in this WSL and ran it out of memory on 2026-10-08.
 - Exported symbols: LSP references, not text search.
 - Reviews: `uv run esr-dev review show N` (out/reviews) and the PR comment. Native
   Excel evidence: `out/native/<id>/` and the patch record's `verification` section
