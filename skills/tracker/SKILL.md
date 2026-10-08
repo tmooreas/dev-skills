@@ -116,6 +116,22 @@ text when the runtime supports messages. Do not export unrelated/private payload
   that may still be live (two workers on one worktree corrupt it).
 - Every brief that commits states the commit identity (author and committer);
   rebases never run under a different repo-local user.
+- **Every handoff brief is approved by the owner before launch** (owner
+  2026-10-06). Show the brief itself: the owner's words it serves, the existing
+  code it extends or replaces (file:line), the concrete design, what is out of
+  scope, how it is checked, and a line **"Judgments in code:"** listing each place
+  the code decides what data means and who should decide it instead ("none" only
+  after checking). A BLOCKED review is reported and stops; the next brief waits.
+- **Exempt from approval** (owner 2026-10-07): mechanical git with no behaviour
+  change (rebases, restacks, their scoped checks, pushes of approved work,
+  retargets, CI reruns, closing what the owner already dropped). Do it and report;
+  ask only when a conflict needs a behaviour choice. A cheaper model may execute it
+  and hands back to an implementer when a conflict touches logic or tests.
+- **Smoke before the owner sees it** (owner 2026-10-07): before calling a PR
+  ready, the orchestrator runs the changed behaviour on the exact head through
+  the project's real entry points, including one refusal or failure path, reads
+  the produced artifacts and shows that output. A reviewer PASS and green CI are
+  not a substitute.
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No

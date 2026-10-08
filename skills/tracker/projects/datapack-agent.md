@@ -31,18 +31,10 @@ worker exited; its `.out` file and session hold the result.
 
 ## Owner gates
 
-- **Every handoff brief is approved by the owner before launch** (2026-10-06): the
-  owner's words it serves, the existing code it extends or replaces (file:line), the
-  concrete design, what is out of scope, how it is checked, and a line
-  **"Judgments in code:"** listing each place the code decides what data means and who
-  should decide it instead. A BLOCKED review is reported and stops; the next brief waits.
-- **Exempt from approval** (2026-10-07): mechanical git with no behaviour change
-  (rebases, restacks, their scoped checks, pushes of approved work, retargets, CI reruns,
-  closing what the owner already dropped). Do them and report; ask only when a conflict
-  needs a behaviour choice.
-- **Smoke before the owner sees it** (2026-10-07): the orchestrator runs the changed
-  behaviour on the exact head through the real runners (copy of a deal in a temp folder,
-  `~/dpa/venv312`), including one refusal path, and shows the output.
+The generic skill's brief approval, mechanical-git exemption and smoke-before-owner
+gates apply. Here:
+- The smoke runs the real runners (`run_ingestion.py`, ideation, `run_excel_build.py`)
+  on a copy of a deal in a temp folder with `~/dpa/venv312`, never in `Deals/`.
 - Merges need the owner naming the PR; the executor rechecks head, base, CI and
   mergeability immediately before merging.
 
