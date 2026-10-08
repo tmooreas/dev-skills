@@ -135,6 +135,15 @@ text when the runtime supports messages. Do not export unrelated/private payload
   scope, how it is checked, and a line **"Judgments in code:"** listing each place
   the code decides what data means and who should decide it instead ("none" only
   after checking). A BLOCKED review is reported and stops; the next brief waits.
+- **Screen every option before the owner sees it** (owner 2026-10-08: "it's a tax
+  on me to always be reading these questions and seeing if you're secretly
+  suggesting a parser"). Check each option, brief and recommendation against
+  review-pr's blocking red flags first (custom parsers, code deciding meaning,
+  structure dropped then re-parsed, fail-open, duplicate owners). An option that
+  violates one is not offered, not even as the alternative; redesign it or drop it.
+  Name the mechanism plainly ("a model with a Python tool checks it", "the producer
+  writes a typed field"), never a vague verb ("the grader verifies") that hides
+  whether code or a model does the work.
 - **Exempt from approval** (owner 2026-10-07): mechanical git with no behaviour
   change (rebases, restacks, their scoped checks, pushes of approved work,
   retargets, CI reruns, closing what the owner already dropped). Do it and report;
