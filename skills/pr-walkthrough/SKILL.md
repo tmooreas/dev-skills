@@ -147,8 +147,13 @@ Check each item against the diff.
 - **Special cases:** behaviour keyed to a test fixture, a customer name or one incident.
 - **Tests that pin wording/wiring:** asserting message text, formula strings or call
   forwarding instead of behaviour; goldens rebaked to hide a change.
-- **Dead or half-done code:** stubs, unused flags, compatibility shims, unfinished
-  cutover.
+- **Dead or half-done code:** stubs, unused flags, unfinished cutover.
+- **Unneeded backward compatibility:** on a greenfield project, any shim, alias,
+  fallback, legacy reader, dual path or migration kept for the project's own earlier
+  formats, templates, commands or records. It is allowed only with a proven, stated
+  customer need: who depends on the old form, and why they can't move. Otherwise the
+  old path is deleted in the same change and every caller migrated, with no coding or
+  review time spent keeping it alive.
 
 ## Rules
 

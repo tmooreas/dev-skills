@@ -53,6 +53,12 @@ A skill invocation is not approval of any PR or a production action.
    reintroduce its findings as functional blockers. Operational run bounds still
    apply. A real structural dependency on deferred work must be reported; propose
    a functional-only cutover or wait, never silently drop necessary functionality.
+5. Greenfield projects carry no backward compatibility with their own past. Task
+   packets, implementations and reviews spend no time on shims, aliases,
+   fallbacks, legacy readers, dual paths or migrations for the project's earlier
+   formats, templates, commands or records. That holds unless a proven, stated
+   customer need exists: who depends on the old form, and why they can't move.
+   Replace the old path, delete it in the same change and migrate every caller.
 
 ## Facts, ownership and ledger
 
