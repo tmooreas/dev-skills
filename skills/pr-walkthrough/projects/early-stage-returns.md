@@ -72,3 +72,8 @@ directly and never go through the Windows helper.
   harness's audit-hook watch (`tests/test_office.py`).
 - **Code hygiene:** comments that stand in for DECISIONS.md; a file over 600 lines; a
   ratchet count in `tests/lint_baseline.json` that went up.
+- **Backward compatibility with our own past (owner, 2026-10-08: greenfield):** any
+  shim, alias, fallback, "legacy" reader or dual path kept for an earlier esr artifact,
+  such as the Artemis template, a superseded Sank template version, old CLI forms, old
+  record or evidence formats, or renamed keys. The replaced path is deleted in the same
+  change and every caller is migrated.
