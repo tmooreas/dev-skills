@@ -33,13 +33,6 @@ Before anything else, check the skill and find the adapter:
    adapter fix at the end. New general rules go in this file; project rules go in the
    adapter. Never copy either into a project's own skills.
 
-Check the adapter against this skill every run, before using it: every section number
-it refers to exists here with the same meaning, every command and path it names still
-exists in the project, and none of its rules contradicts a rule here without saying it
-overrides it. Report any drift in one line at the top of the walkthrough and follow
-this skill where the adapter is stale. Generic improvements go in this file, never in
-an adapter; an adapter holds only what is specific to its project.
-
 ## Prepare (before writing a word)
 
 1. Pin the facts live: `gh pr view N --json headRefOid,baseRefName,isDraft,state,additions,deletions,statusCheckRollup,body`,
