@@ -9,6 +9,7 @@ architecture contracts, priorities and production permissions.
 | [tracker](skills/tracker/SKILL.md) | Named ownership, bounded async orchestration, compact context, independent review, dependency/CI gates and authorized mechanical execution. |
 | [review-pr](skills/review-pr/SKILL.md) | Seven review questions, helper ownership, actual consumer proof, mutations/near misses, historical comparisons and exact-head verdicts. |
 | [issue-queue](skills/issue-queue/SKILL.md) | Current-main backlog reconciliation, next-action sequencing and executed proof before issue closure. |
+| [pr-walkthrough](skills/pr-walkthrough/SKILL.md) | Owner-facing walkthrough of one PR at its current head: plain language, an ASCII flow diagram, code places, a worked example, proof, whether each test earns its place, and an antipattern check that stops on the first finding. Per-project adapters live in `skills/pr-walkthrough/projects/`. |
 
 ## Use
 
@@ -21,7 +22,7 @@ policy so CLI-specific details do not enter every task's context.
 git clone https://github.com/tmooreas/dev-skills.git
 cd dev-skills
 mkdir -p "$HOME/.agents/skills"
-for skill in tracker review-pr issue-queue; do
+for skill in tracker review-pr issue-queue pr-walkthrough; do
   target="$HOME/.agents/skills/$skill"
   if [ -e "$target" ] || [ -L "$target" ]; then
     printf 'Already exists; reconcile before linking: %s\n' "$target" >&2
@@ -37,7 +38,7 @@ existing installation before moving/replacing it. Runtime skill roots and comman
 spelling can differ; omp uses `/skill:tracker`, `/skill:review-pr` and
 `/skill:issue-queue`, while Claude uses `/tracker`, `/review-pr` and `/issue-queue`.
 If automatic discovery is disabled, explicitly read the desired `SKILL.md`.
-Keep the three skills together so their sibling references resolve.
+Keep the skills together so their sibling references resolve.
 
 Owner approval, reviewer PASS, current-head CI, merge and deployment remain
 separate permissions. Invoking a skill grants none of them implicitly. Cheaper
@@ -77,6 +78,15 @@ Initial publication, 2026-10-05:
 - Review-pr: EarningsPulse's latest helper-to-owner review drill, including the
   changes independently reviewed in PR #1371.
 - Issue-queue: EarningsPulse's current-main triage and strong closure-proof rules.
+
+Added 2026-10-08:
+- Pr-walkthrough: the Datapack Agent walkthrough, plus an ASCII flow diagram in every
+  walkthrough, a "Structure dropped, then re-parsed" antipattern, a section asking
+  whether each test proves the wanted behaviour, adds anything or codifies a bug, and
+  project adapters. `projects/early-stage-returns.md` is the first adapter. An adapter
+  holds one repository's commands, proof sources, safety limits and extra antipatterns.
+  It adds to the portable skill and never forks it: change the shared method in
+  `SKILL.md` and project specifics in the adapter.
 
 The shared versions retain those methods but resolve repository-specific commands,
 paths, issue IDs, numeric limits and production policies from the target project.
