@@ -153,6 +153,11 @@ Check each item against the diff.
   customer need: who depends on the old form, and why they can't move. Otherwise the
   old path is deleted in the same change and every caller migrated, with no coding or
   review time spent keeping it alive.
+- **Built what nobody asked for:** list each part of the PR next to what asked for it
+  (the owner's words, the issue's stated problem, an approved spec). A part with no
+  asker (an extra comparison, statistics, a framework, an option, a generalization) is
+  an antipattern: stop and propose cutting it, rather than walking it through or
+  offering to keep it.
 
 ## Rules
 
