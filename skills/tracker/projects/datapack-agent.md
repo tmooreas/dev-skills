@@ -38,6 +38,7 @@ gates apply. Here:
   on a copy of a deal in a temp folder with `~/dpa/venv312`, never in `Deals/`.
 - Merges need the owner naming the PR; the executor rechecks head, base, CI and
   mergeability immediately before merging.
+- **Standing approval for run_cut slices** (owner 2026-10-08: "all these run cut ones are basically the same and i think we have the right scheme here so as long as there no scope creep i feel good about them"): a brief for a run_cut slice that follows the approved scheme (typed request validated against the cut's definition; keys as JSON objects of declared fields; layout emits key + cell kind; answers.py / run_cut.py reused; refusals with declared reasons; provisional before CP1) launches without asking. Anything beyond that scheme, or any scope creep, goes back to the owner. Merges still follow the walkthrough rule.
 - Never ask the owner to approve a merge before a full pr-walkthrough of that PR
   (owner 2026-10-08). Once the owner has approved a PR, merge it when its gates pass;
   do not ask again (a later restack with no behaviour change keeps the approval).
