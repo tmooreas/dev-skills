@@ -12,6 +12,12 @@ generic skill only with the owner's say-so.
   checks) itself instead of launching a worker. Reviews after a fix are scoped deltas,
   never a full re-review. Resume an existing session rather than start a fresh one
   when the context is still relevant.
+- **Ledger plus aggressive compaction** (owner 2026-10-09): `~/dpa-lanes/LEDGER.md` is the
+  durable source of truth for decisions, PR heads/states, branches, queue and next steps.
+  Update it at every event (launch, verdict, head change, merge, owner decision); compact
+  the orchestrator's context aggressively instead of restarting; after a compaction, re-read
+  the ledger before acting (it wins over the summary). Jobs are queued in
+  `~/dpa-lanes/queue.txt`, started one at a time by the `queue` tmux window.
 - Models (owner 2026-10-09, after Claude usage ran out): `openai-codex/gpt-6.1-sol`
   implements, reviews (a separate session from the implementer) and executes
   mechanical git. `openai-codex/gpt-6-astra` is an advisor only: a bounded, read-only
