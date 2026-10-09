@@ -6,12 +6,18 @@ generic skill only with the owner's say-so.
 
 ## Bounds and models
 
-- Up to **three** simultaneous model jobs (owner 2026-10-07; overrides the generic two).
-- Implementers: `anthropic/claude-opus-5-5`. Independent reviewers:
-  `openai-codex/gpt-6.1-sol`. Mechanical executor (clean rebases/restacks, pushes of
-  approved heads, retargets, CI reruns, closures already decided, owner-approved
-  merges): `anthropic/claude-sonnet-5-5`; it hands back to an Opus implementer the
-  moment a conflict touches logic or tests, or a test fails after a rebase.
+- **One model job at a time** (owner 2026-10-09: "further optimize usage and minimize
+  threads"; overrides the earlier three). Queue the next job behind the running one.
+  The orchestrator does small mechanical work (merges after gates, pushes, short
+  checks) itself instead of launching a worker. Reviews after a fix are scoped deltas,
+  never a full re-review. Resume an existing session rather than start a fresh one
+  when the context is still relevant.
+- Models (owner 2026-10-09, after Claude usage ran out): `openai-codex/gpt-6.1-sol`
+  implements, reviews (a separate session from the implementer) and executes
+  mechanical git. `openai-codex/gpt-6-astra` is an advisor only: a bounded, read-only
+  question on a hard design or a disputed finding, with a compact packet; never routine
+  review or implementation (expensive). Claude models only when `omp usage` shows
+  allowance left; warn the owner about Claude usage before launching one.
 - Commit identity: author and committer "Tom Moore" <tmoore@american-securities.com>.
 
 ## Memory (WSL out-of-memory crash, 2026-10-08)
