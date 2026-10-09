@@ -84,7 +84,10 @@ Keep each section short; the owner can ask for more.
    changed piece reads (its producer) and what reads it (its consumer).
 5. **A worked example:** real numbers from a real run (the orchestrator's smoke, or run
    it now): input -> what the code did -> what the user sees. Include one refusal or
-   edge case.
+   edge case. It must be the feature's main customer scenario, run by you (e.g. carry
+   forward: polish a workbook, drop data, carry forward, see what survived); a refusal
+   path or someone else's test is not a worked example. If you cannot run it, say so
+   and make no merge recommendation.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
