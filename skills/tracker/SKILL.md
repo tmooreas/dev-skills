@@ -159,7 +159,12 @@ text when the runtime supports messages. Do not export unrelated/private payload
   ready, the orchestrator runs the changed behaviour on the exact head through
   the project's real entry points, including one refusal or failure path, reads
   the produced artifacts and shows that output. A reviewer PASS and green CI are
-  not a substitute.
+  not a substitute. The smoke runs the feature's MAIN customer scenario end to end, as
+  a user would hit it (e.g. carry forward: polish a workbook, drop new data, carry
+  forward, check the polish survived), not only a refusal path or the narrow property
+  the tests pin. If the orchestrator cannot run it (needs Excel, a desktop, a real
+  deal), say so and do not recommend merging until someone has (owner 2026-10-09,
+  after recommending carry forward on others' tests: it rewrote the polished tabs).
 - Launch independent work asynchronously and continue useful work. Use completion
   notifications/job results, not repeated polling. Wait only when otherwise blocked.
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
