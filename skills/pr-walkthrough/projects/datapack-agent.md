@@ -79,6 +79,11 @@ deal's folder. No GitHub writes.
   `IFERROR(...,0)`.
 - **Unknown becomes zero:** a missing gross profit, cost or revenue summed as 0
   (`fillna(0)`, pandas `sum` over NaN) instead of staying unknown and refusing.
+- **Plausibility bands:** thresholds on size, share or direction (row counts, %
+  shares, "one-directional", relative-deviation bins) that decide what the data means
+  or which of two values wins, e.g. the deleted GP classifier ("sporadic" mismatch
+  rewritten, "systematic" kept; owner 2026-10-09: "a really bad plausibility band
+  antipattern"). The deal's declaration or the associate at CP1 decides; code flags.
 - **Deal folder writes:** code or tests writing into `Deals/` (only the two listed
   synthetic deals are committed, with the owner's per-change exception).
 - **Refusals without a record:** a deliberate stop that exits non-zero without
