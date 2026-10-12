@@ -84,6 +84,18 @@ deal's folder. No GitHub writes.
   or which of two values wins, e.g. the deleted GP classifier ("sporadic" mismatch
   rewritten, "systematic" kept; owner 2026-10-09: "a really bad plausibility band
   antipattern"). The deal's declaration or the associate at CP1 decides; code flags.
+- **Duplication (a second home for something that exists):** for every function,
+  constant, list or writer the PR adds, extracts or gives a new caller, search by
+  **what it does**, not by its name: the file path it reads (`02_intermediate`,
+  `read_parquet`), the operation (`itertuples` -> `ws.append`, `ws.cell` loops), the
+  literal set (the six table names). A reviewer PASS and an inventory hit on the new
+  name prove nothing about copies under other names. Layer rules hide copies:
+  `emission` may not import `sources` (`tests/test_architecture.py` `PERMITTED`), so
+  an emission module reimplements a sources helper instead of the helper moving to
+  `utils`/`providers`. Report each copy found with file:line, whether this PR adds,
+  extends or merely moves it, and where the one owner should live. Missed on #214
+  (owner 2026-10-12: `_load_parquet_table` next to three other readers of the same
+  parquet files; "vigilance and completeness").
 - **Deal folder writes:** code or tests writing into `Deals/` (only the two listed
   synthetic deals are committed, with the owner's per-change exception).
 - **Refusals without a record:** a deliberate stop that exits non-zero without

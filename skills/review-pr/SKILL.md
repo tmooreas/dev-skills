@@ -96,6 +96,12 @@ For every NEW helper, predicate, parser or IO adapter record:
   helper is not an added one. Distinguish preexisting debt from debt introduced
   by this PR. Repeated names are candidates, never automatic blockers.
 - A material second owner can block even when today's numerical output is right.
+- Search by operation, not name: the path or file a helper reads, the write loop it
+  runs, the literal set it holds. A helper the PR extracts, moves or gives a new
+  caller still counts when copies exist elsewhere: list every copy (path:line),
+  say whether this PR adds, extends or only moves it, and where the one owner
+  belongs. A layer rule that forced a copy (a module may not import the owner's
+  layer) is a finding, with the owner's correct layer as the fix.
 
 Check the project's typed artifact loaders, status/gate registries, forward
 import/layer contract, ratchets and owned modules. New untyped consumers beside a
