@@ -71,7 +71,14 @@ gates apply. Here:
 
 ## Dev checks every implementer result carries
 
-- Reuse inventory for each new helper or constant: `python dev/tools/inventory.py --grep <name>`.
+- Reuse inventory BEFORE writing each new function, constant, list or writer (CLAUDE.md,
+  CONTRIBUTING "Reuse first"): `python dev/tools/inventory.py --grep <word>` over the
+  WHOLE plugin, once per capability word (what it reads or does: `parquet`, `cleaned`,
+  `sheet`, `cagr`), never `--module` alone. The PR's Reuse section lists, per new
+  symbol, the commands run and the hits (path:line) with reuse / distinct-because.
+  A Reuse line citing only `--module <the file I edited>` is NOT_REVIEWED. (#214's B1
+  fix ran `--module excel_build` and missed `data_reader.read_cleaned_parquet`, which
+  `--grep parquet` lists.) Reviewers and the orchestrator re-run the greps.
 - Size: `python dev/check_pr_size.py <base> <head> --pr N` (800-line guide; owner
   exceptions are recorded per PR).
 - Focused tests and their output; a result without them is NOT_REVIEWED.
