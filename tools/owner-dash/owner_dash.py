@@ -12,7 +12,9 @@ Files live in $OWNER_DASH_DIR (default ~/.local/share/owner-dash)/<project>/.
 Run through bin/owner-dash, which provides its venv.
 """
 import argparse
+import ast
 import html
+import json
 import re
 import mimetypes
 import shutil
@@ -20,6 +22,7 @@ import subprocess
 import sys
 from urllib.parse import quote, unquote
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from os import environ
@@ -92,26 +95,92 @@ def fetch_diff(args):
         return print("owner-dash: no --repo and none known; walkthrough posted without its diff", file=sys.stderr)
     path = target(args.project, "walkthrough", args.number).with_suffix(".diff")
     stored = re.search(r" base (\S+)", path.read_text(encoding="utf-8").split("\n", 1)[0]) if path.is_file() else None
-    base = args.base or (stored and stored.group(1))
-    head = subprocess.run(["gh", "pr", "view", args.number, "-R", repo, "--json", "headRefOid", "-q", ".headRefOid"],
+    pr = subprocess.run(["gh", "pr", "view", args.number, "-R", repo, "--json", "headRefOid,baseRefName",
+                         "-q", ".headRefOid+\" \"+.baseRefName"], capture_output=True, text=True)
+    if pr.returncode:
+        return print(f"owner-dash: gh failed; no diff stored: {pr.stderr.strip()}", file=sys.stderr)
+    sha, pr_base = pr.stdout.split()
+    base = args.base or (stored and stored.group(1)) or pr_base
+    compare = f"repos/{repo}/compare/{base}...{sha}"
+    merge_base = subprocess.run(["gh", "api", compare, "--jq", ".merge_base_commit.sha"], capture_output=True, text=True)
+    diff = subprocess.run(["gh", "api", compare, "-H", "Accept: application/vnd.github.diff"],
                           capture_output=True, text=True)
-    sha = head.stdout.strip()
-    if base:
-        diff = subprocess.run(["gh", "api", f"repos/{repo}/compare/{base}...{sha}", "-H",
-                               "Accept: application/vnd.github.diff"], capture_output=True, text=True)
-    else:
-        diff = subprocess.run(["gh", "pr", "diff", args.number, "-R", repo], capture_output=True, text=True)
-    if head.returncode or diff.returncode:
-        return print(f"owner-dash: gh failed; no diff stored: {(head.stderr + diff.stderr).strip()}", file=sys.stderr)
-    path.write_text(f"# head {sha}{f' base {base}' if base else ''}\n{diff.stdout}", encoding="utf-8")
+    if merge_base.returncode or diff.returncode:
+        return print(f"owner-dash: gh failed; no diff stored: {(merge_base.stderr + diff.stderr).strip()}",
+                     file=sys.stderr)
+    path.write_text(f"# head {sha} base {base}\n{diff.stdout}", encoding="utf-8")
+    names = touched_names(repo, merge_base.stdout.strip(), sha, parse_diff(diff.stdout))
+    path.with_suffix(".names.json").write_text(json.dumps(names), encoding="utf-8")
     return True
+
+
+def source(repo, ref, file):
+    out = subprocess.run(["gh", "api", f"repos/{repo}/contents/{quote(file)}?ref={ref}", "-H",
+                          "Accept: application/vnd.github.raw"], capture_output=True, text=True)
+    return out.stdout if out.returncode == 0 else ""
+
+
+def spans(text):
+    """(first line, last line, name) for top-level functions, classes, their methods and module-level names."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    out = []
+    def add(node, name):
+        start = min([d.lineno for d in getattr(node, "decorator_list", [])] + [node.lineno])
+        out.append((start, node.end_lineno, name))
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            add(node, node.name)
+            for member in node.body if isinstance(node, ast.ClassDef) else []:
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    add(member, member.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            target = node.targets[0] if isinstance(node, ast.Assign) else node.target
+            if isinstance(target, ast.Name):
+                add(node, target.id)
+    return out
+
+
+def name_at(found, line):
+    inside = [s for s in found if s[0] <= line <= s[1]]
+    return max(inside)[2] if inside else None
+
+
+def touched_names(repo, old_ref, new_ref, files):
+    """{path: [names per hunk]}: the enclosing definition of every changed line, read from both versions."""
+    py = [f for f in files if f["path"].endswith(".py")]
+    with ThreadPoolExecutor(8) as pool:
+        old = list(pool.map(lambda f: spans(source(repo, old_ref, f["old"])), py))
+        new = list(pool.map(lambda f: spans(source(repo, new_ref, f["path"])), py))
+    result = {}
+    for f, old_spans, new_spans in zip(py, old, new):
+        if old_spans is None or new_spans is None:
+            continue
+        per_hunk = []
+        for hunk in f["hunks"]:
+            a, c = (int(n) for n in re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)", hunk["header"]).groups())
+            names = set()
+            for line in hunk["lines"]:
+                kind, body = line[:1], line[1:]
+                if kind == "-" and body.strip() and (n := name_at(old_spans, a)):
+                    names.add(n)
+                if kind == "+" and body.strip() and (n := name_at(new_spans, c)):
+                    names.add(n)
+                a += kind in " -"
+                c += kind in " +"
+            per_hunk.append(sorted(names))
+        result[f["path"]] = per_hunk
+    return result
 
 
 def parse_diff(text):
     files, hunk = [], None
     for line in text.splitlines():
         if line.startswith("diff --git "):
-            files.append({"path": line.split(" b/", 1)[-1], "hunks": []})
+            old, new = re.match(r"diff --git a/(.*) b/(.*)", line).groups()
+            files.append({"path": new, "old": old, "hunks": []})
             hunk = None
         elif line.startswith("@@") and files:
             hunk = {"header": line, "lines": []}
@@ -135,7 +204,9 @@ DEF = re.compile(r"\s*(?:async\s+)?(?:def|class)\s+(\w+)")
 
 
 def touched(hunk):
-    """Functions, classes and module-level names whose lines this hunk changes (Python files)."""
+    """Names whose lines this hunk changes: from the parsed sources when stored, else the diff's def lines."""
+    if "names" in hunk:
+        return set(hunk["names"])
     context = hunk["header"].split("@@")[-1]
     current = (DEF.match(context) or [None, None])[1]
     names = set()
@@ -148,6 +219,17 @@ def touched(hunk):
         if line[:1] in "+-" and body.strip() and current:
             names.add(current)
     return names
+
+
+def load_diff(path):
+    raw = path.with_suffix(".diff").read_text(encoding="utf-8")
+    files = parse_diff(raw)
+    names_file = path.with_suffix(".names.json")
+    names = json.loads(names_file.read_text(encoding="utf-8")) if names_file.is_file() else {}
+    for f in files:
+        for hunk, found in zip(f["hunks"], names.get(f["path"], [])):
+            hunk["names"] = found
+    return raw, files
 
 
 def units(files):
@@ -196,8 +278,7 @@ def place(path):
 
     A file named on its own takes only the hunks no symbol mention anywhere claims.
     """
-    raw = path.with_suffix(".diff").read_text(encoding="utf-8")
-    files = parse_diff(raw)
+    raw, files = load_diff(path)
     tokens = MARKDOWN.parse(path.read_text(encoding="utf-8"))
     claims, current = {}, []
     for i, token in enumerate(tokens):
