@@ -475,6 +475,7 @@ th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overfl
 nav{margin-bottom:16px}nav a{margin-right:16px;font-weight:600}.when{color:#777;font-size:13px;margin-left:8px}
 tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#0b5cad;font-size:13px}
 button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
+#foldfix{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
 .diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}
@@ -485,7 +486,45 @@ details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;fon
 ::highlight(same){background:#ffe58a}
 </style>"""
 
-SAME_WORD = """<script>
+SCRIPT = """<button id=foldfix></button><script>
+// Open sections are remembered per page: each <details> is keyed by its summaries' text, outermost first,
+// plus how many earlier sections share that text.
+const store = "open:" + location.pathname;
+const keyed = new Map(), seen = {};
+for (const d of document.querySelectorAll("details")) {
+  const names = [];
+  for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(e.querySelector(":scope>summary")?.textContent);
+  const name = names.join(" / ");
+  seen[name] = (seen[name] || 0) + 1;
+  keyed.set(d, `${name} #${seen[name]}`);
+}
+const remembered = new Set(JSON.parse(localStorage.getItem(store) || "[]"));
+for (const [d, key] of keyed) if (remembered.has(key)) d.open = true;
+document.addEventListener("toggle", () => {
+  localStorage.setItem(store, JSON.stringify([...keyed].filter(([d]) => d.open).map(([, key]) => key)));
+  placeFold();
+}, true);
+
+// A collapse button pinned to the right edge while the middle of the screen is inside an open walkthrough.
+const fold = document.getElementById("foldfix");
+let showing = null;
+function placeFold() {
+  showing = [...document.querySelectorAll("tr.wt details[open]")].find(d => {
+    const r = d.getBoundingClientRect();
+    return r.top < innerHeight / 2 && r.bottom > innerHeight / 2;
+  }) || null;
+  fold.style.display = showing ? "block" : "none";
+  if (showing) fold.textContent = "Collapse " + showing.querySelector(":scope>summary").textContent;
+}
+fold.onclick = () => {
+  const row = showing.closest("tr").previousElementSibling;
+  showing.open = false;
+  row.scrollIntoView({block: "center"});
+};
+addEventListener("scroll", placeFold, {passive: true});
+addEventListener("resize", placeFold);
+placeFold();
+
 document.addEventListener("selectionchange", () => {
   if (!window.CSS || !CSS.highlights) return;
   CSS.highlights.delete("same");
@@ -508,7 +547,7 @@ def page(project, title, body):
     sub = "" if not project else (f'<nav><a href="/{project}/">Matrix</a><a href="/{project}/walkthroughs/">Walkthroughs</a>'
                                   f'<a href="/{project}/reviews/">Reviews</a></nav>')
     return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
-            f"{SAME_WORD}")
+            f"{SCRIPT}")
 
 
 def pr_number(path):
