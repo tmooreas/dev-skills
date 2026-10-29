@@ -59,7 +59,8 @@ def put(args):
         folder = path.with_suffix(".files")
         for item in args.attach:
             folder.mkdir(exist_ok=True)
-            shutil.copy2(item, folder / Path(item).name)
+            if Path(item).resolve() != (folder / Path(item).name).resolve():
+                shutil.copy2(item, folder / Path(item).name)
         if fetch_diff(args):
             missing, report = coverage_report(path)
             print(report, file=sys.stderr)
