@@ -260,18 +260,23 @@ def mentions(hunk, names):
 
 
 def hunks_for(span, files):
-    """(file, hunk, specific) for a code span: a file (not specific), a file's symbol, or one identifier."""
+    """(file, hunk, strength, by file) for a code span: strength 3 names the hunk's own definition, 2 a name its lines
+    use, 1 only its file; by file when the span names the file."""
     parts = [p for p in re.split(r"[./:()\s,]+", span) if p]
     found = []
     for f in files:
         path = Path(f["path"])
         if path.stem in parts or f["path"].endswith(span.split(":")[0]):
             names = [p for p in parts if p not in (path.stem, path.suffix[1:]) and not p.isdigit()]
-            found += [(f, h, bool(names)) for h in f["hunks"] if not names or mentions(h, names)]
+            found += [(f, h, strength(h, names), True) for h in f["hunks"] if not names or mentions(h, names)]
         elif len(parts) == 1 and re.fullmatch(r"[A-Za-z_]\w*", span) and (
                 "_" in span or re.search(r"[a-z][A-Z]", span) or any(span in touched(h) for h in f["hunks"])):
-            found += [(f, h, True) for h in f["hunks"] if mentions(h, parts)]
+            found += [(f, h, strength(h, parts), False) for h in f["hunks"] if mentions(h, parts)]
     return found
+
+
+def strength(hunk, names):
+    return 1 if not names else 3 if touched(hunk) & set(names) else 2
 
 
 def changed(hunk):
@@ -279,38 +284,43 @@ def changed(hunk):
 
 
 def place(path):
-    """Walkthrough tokens with each referenced hunk inserted after the paragraph that names it.
+    """Walkthrough tokens with each changed hunk shown once, after the paragraph that explains it best.
 
-    A file named on its own takes only the hunks no symbol mention anywhere claims.
+    Best: names the hunk's own definition over a name it only uses over its bare file; then the paragraph that also
+    names the hunk's file; then the one in the section that owns it (4 for code, 8 for tests); then the paragraph
+    naming the fewest hunks; then the first.
     """
     raw, files = load_diff(path)
     tokens = MARKDOWN.parse(path.read_text(encoding="utf-8"))
-    claims, current = {}, []
+    claims, sections, current, number = {}, {}, [], None
     for i, token in enumerate(tokens):
         if token.type == "inline":
+            number = m.group(1) if (m := re.match(r"\s*\*\*(\d+a?)\.", token.content)) else number
             current += [m for child in token.children or [] if child.type == "code_inline"
                         for m in hunks_for(child.content, files)]
         elif token.type == "paragraph_close" and current:
-            claims[i], current = current, []
-    specific = {id(h) for found in claims.values() for _, h, s in found if s}
-    out, placed = [], set()
+            claims[i], sections[i], current = current, number, []
+    best = {}
+    for i, found in claims.items():
+        breadth, named = len({id(h) for _, h, _, _ in found}), {f["path"] for f, _, _, by_file in found if by_file}
+        for f, h, s, _ in found:
+            key = (-s, f["path"] not in named, sections[i] != ("8" if is_test(f["path"]) else "4"), breadth, i)
+            if id(h) not in best or key < best[id(h)][0]:
+                best[id(h)] = (key, i, f)
+    out = []
     for i, token in enumerate(tokens):
         out.append(token)
-        by_file, seen = {}, set()
-        for f, h, s in claims.get(i, []):
-            if id(h) in seen or (not s and id(h) in specific):
-                continue
-            seen.add(id(h))
+        by_file = {}
+        for f, h in {id(h): (f, h) for f, h, _, _ in claims.get(i, []) if best[id(h)][1] == i}.values():
             by_file.setdefault(f["path"], []).append(h)
         if not by_file:
             continue
-        placed |= seen
         blocks = "".join(diff_html(p, hs) for p, hs in sorted(by_file.items(), key=lambda i: is_test(i[0])))
         block = Token("html_block", "", 0)
         block.content = (f"<details class=dx><summary>diff: {sum(changed(h) for hs in by_file.values() for h in hs)}"
                          f" lines</summary>{blocks}</details>")
         out.append(block)
-    return out, files, placed, raw.split("\n", 1)[0].removeprefix("# head ")[:8]
+    return out, files, set(best), raw.split("\n", 1)[0].removeprefix("# head ")[:8]
 
 
 def unplaced(files, placed):

@@ -229,7 +229,12 @@ Post every walkthrough to the owner dashboard:
 (text on stdin; `--attach <file>` per output file; `--base <branch>` for a PR stacked
 on another PR, so the diff is its own lines). It stores the PR's diff and runs the
 checks: every changed line is placed beside the text, and every touched name is named
-(code in section 4, tests anywhere). It exits non-zero and lists what is missing; fix
+(code in section 4, tests anywhere). Each changed block shows once (owner 2026-10-29:
+repeated diffs bury the explanation), under the paragraph that explains it best: the
+one naming the block's own function, then the one also naming its file, then section 4
+(section 8 for tests), then the paragraph naming the fewest blocks. So name a function
+in the bullet that explains it, and name the file for blocks a bullet covers only by
+usage (imports, call-site swaps). It exits non-zero and lists what is missing; fix
 the text and post again until it passes, then send it in chat.
 `owner-dash … check N` refetches the diff at the current head and re-runs the checks.
 When the owner asks for a walkthrough you already wrote and the head has not moved,
