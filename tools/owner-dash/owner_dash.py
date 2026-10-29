@@ -246,7 +246,11 @@ def unnamed(md, files):
     """Touched names not mentioned where they must be: code in section 4, tests anywhere."""
     how = section(md, 4)
     return [(p, n) for p, n in units(files)
-            if not re.search(rf"\b{re.escape(n)}\b", md if "test" in Path(p).name else how)]
+            if not re.search(rf"\b{re.escape(n)}\b", md if is_test(p) else how)]
+
+
+def is_test(path):
+    return any(part.startswith("test") for part in Path(path).parts)
 
 
 def mentions(hunk, names):
@@ -300,7 +304,7 @@ def place(path):
         if not by_file:
             continue
         placed |= seen
-        blocks = "".join(diff_html(p, hs) for p, hs in sorted(by_file.items(), key=lambda i: "test" in i[0]))
+        blocks = "".join(diff_html(p, hs) for p, hs in sorted(by_file.items(), key=lambda i: is_test(i[0])))
         block = Token("html_block", "", 0)
         block.content = (f"<details class=dx><summary>diff: {sum(changed(h) for hs in by_file.values() for h in hs)}"
                          f" lines</summary>{blocks}</details>")
