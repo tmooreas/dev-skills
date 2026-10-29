@@ -82,6 +82,14 @@ Keep each section short; the owner can ask for more.
 4. **How it works in the code:** the places that matter, each as `file:line` plus
    one sentence on what that code does and why it is written that way. Name what each
    changed piece reads (its producer) and what reads it (its consumer).
+   - **Ordered as the data moves, not as a list of methods** (owner 2026-10-29: "a much
+     better format ... sort of matches the data journey idea"). When the PR touches more
+     than a few names, group them under numbered steps in the order the work happens
+     (e.g. "Step 1: read the three versions", "Step 2: give every cell a name", "Step 3:
+     decide each cell", "Step 4: write and report"). Each step's title says what happens in
+     plain words; under it, each name gets one plain clause, with a concrete example where
+     it helps (`=F5/D5` becomes "Total revenue FY24 ÷ Total revenue FY22"). Docs and
+     Mechanical bullets follow the steps. A small PR may skip the steps.
    - **Every touched function, class and module-level name is explained here,** in a
      code span (`module.name` or `name`) so its diff lands beside the sentence: what
      changed in it and why. Caution (owner 2026-10-29): a changed method the text does
