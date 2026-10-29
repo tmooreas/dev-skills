@@ -388,9 +388,31 @@ def link_files(path, body):
     return body
 
 
+OPEN = {}
+
+
+def open_prs(base):
+    """The project's open PR numbers, asked of GitHub at most once a minute; None when unknown."""
+    saved = base / "repo.txt"
+    if not saved.is_file():
+        return None
+    asked, numbers = OPEN.get(base, (0, None))
+    if time.time() - asked > 60:
+        out = subprocess.run(["gh", "pr", "list", "-R", saved.read_text(encoding="utf-8").strip(), "--state", "open",
+                              "--limit", "1000", "--json", "number", "--jq", ".[].number"], capture_output=True, text=True)
+        numbers = None if out.returncode else set(out.stdout.split())
+        OPEN[base] = (time.time(), numbers)
+    return numbers
+
+
 def with_walkthroughs(base, matrix_html):
+    still_open, gone = open_prs(base), []
+
     def expand(row):
         found = re.search(r"#(\d+)", row.group(0))
+        if found and still_open is not None and found.group(1) not in still_open:
+            gone.append(f"#{found.group(1)}")
+            return ""
         path = found and base / "walkthroughs" / f"pr{found.group(1)}.md"
         if not path or not path.is_file():
             return row.group(0)
@@ -400,7 +422,10 @@ def with_walkthroughs(base, matrix_html):
                 f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
                 f'</button></details></td></tr>')
     head, sep, rest = matrix_html.partition("</table>")
-    return re.sub(r"<tr>\s*<td.*?</tr>", expand, head, flags=re.S) + sep + rest
+    body = re.sub(r"<tr>\s*<td.*?</tr>", expand, head, flags=re.S) + sep + rest
+    note = ("<p class=when>Could not ask GitHub which PRs are open; showing every row.</p>" if still_open is None
+            else f"<p class=when>Hidden, merged or closed: {', '.join(gone)}</p>" if gone else "")
+    return note + body
 
 
 STYLE = """<style>
@@ -468,11 +493,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
         if len(parts) == 2:
             files = sorted(folder.glob("pr*.md"), key=pr_number, reverse=True) if folder.is_dir() else []
-            items = "".join(
-                f'<li><a href="/{project}/{parts[1]}/{f.name}">#{pr_number(f)}</a>'
-                f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
-                for f in files)
-            return self.send(page(project, parts[1], f"<h1>{parts[1].title()}</h1><ul>{items}</ul>"))
+            still_open = open_prs(base)
+
+            def items(chosen):
+                return "".join(
+                    f'<li><a href="/{project}/{parts[1]}/{f.name}">#{pr_number(f)}</a>'
+                    f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
+                    for f in chosen)
+            done = [f for f in files if still_open is not None and str(pr_number(f)) not in still_open]
+            body = f"<h1>{parts[1].title()}</h1><ul>{items([f for f in files if f not in done])}</ul>"
+            if done:
+                body += f"<details class=dx><summary>Merged or closed ({len(done)})</summary><ul>{items(done)}</ul></details>"
+            return self.send(page(project, parts[1], body))
         if len(parts) == 4 and parts[1] == "walkthroughs" and parts[2].endswith(".files"):
             return self.send_file(folder / parts[2] / parts[3])
         path = folder / parts[2]
