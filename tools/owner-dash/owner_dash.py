@@ -305,7 +305,10 @@ def units(files):
 
 
 def section(md, number):
-    m = re.search(rf"^\W*{number}\.(.*?)(?=^\W*{number + 1}\.|\Z)", md, re.S | re.M)
+    """A walkthrough section: from its bold heading (`**4. ...` or `4. **...`) to the next one's. A plain numbered
+    list inside another section is not a heading."""
+    head = lambda n: rf"^(?:\*\*{n}\.|{n}\.\s+\*\*)"
+    m = re.search(rf"{head(number)}.*?(?={head(number + 1)}|\Z)", md, re.S | re.M)
     return m.group(0) if m else ""
 
 
