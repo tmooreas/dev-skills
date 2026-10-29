@@ -31,6 +31,8 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
+from pygments.lexers import PythonLexer
+from pygments.token import STANDARD_TYPES
 
 ROOT = Path(environ.get("OWNER_DASH_DIR", Path.home() / ".local/share/owner-dash"))
 MARKDOWN = MarkdownIt("commonmark", {"linkify": False}).enable("table")
@@ -208,12 +210,36 @@ def inline(old, new):
     return "".join(out)
 
 
+def python_lines(lines):
+    """Each diff line's text as syntax-coloured html. The old side (context and removed lines) and the new side
+    (context and added lines) are each lexed whole, so a docstring spanning lines colours right."""
+    shown = [html.escape(l[1:]) for l in lines]
+    for side in "-+":
+        picked = [k for k, l in enumerate(lines) if l[:1] in (" ", side)]
+        out, line = [], []
+        for kind, value in PythonLexer(stripnl=False, ensurenl=False).get_tokens("\n".join(lines[k][1:] for k in picked)):
+            css = STANDARD_TYPES.get(kind) or STANDARD_TYPES.get(kind.parent, "")
+            for n, part in enumerate(value.split("\n")):
+                if n:
+                    out.append("".join(line))
+                    line = []
+                if part:
+                    line.append(f"<i class=y{css}>{html.escape(part)}</i>" if css else html.escape(part))
+        out.append("".join(line))
+        for k, text in zip(picked, out):
+            if lines[k][:1] == side or side == "+":
+                shown[k] = text
+    return shown
+
+
 def diff_html(path, hunks):
-    """Prose (.md) shows an edited line once with its changed words marked; code keeps plain removed/added lines."""
+    """Prose (.md) shows an edited line once with its changed words marked; code keeps plain removed/added lines,
+    syntax-coloured for Python."""
     rows, prose = [], path.endswith(".md")
     for hunk in hunks:
         rows.append(f'<span class=dh>{html.escape(hunk["header"])}</span>')
         lines, i = hunk["lines"], 0
+        code = python_lines(lines) if path.endswith(".py") else [html.escape(l[1:]) for l in lines]
         while i < len(lines):
             minus = i
             while minus < len(lines) and lines[minus][:1] == "-":
@@ -236,7 +262,7 @@ def diff_html(path, hunks):
                 i = plus
                 continue
             line = lines[i]
-            rows.append(f'<span class={ {"+": "da", "-": "dd"}.get(line[:1], "dc") }>{html.escape(line)}</span>')
+            rows.append(f'<span class={ {"+": "da", "-": "dd"}.get(line[:1], "dc") }>{html.escape(line[:1])}{code[i]}</span>')
             i += 1
     return f'<div class=diff><div class=df>{html.escape(path)}</div><pre>{"".join(rows)}</pre></div>'
 
@@ -482,6 +508,8 @@ details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;fon
 .diff pre span{display:block;padding:0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .da{background:#e6ffec}.dd{background:#ffebe9}.dh{color:#777;background:#f6f8fa}
 .dm{background:#fffbe6}.dm del{background:#ffc1bd;color:#86181d}.dm ins{background:#abf2bc;text-decoration:none}
+i[class^=y]{font-style:normal}[class^=yk],.yow{color:#0000ff}[class^=ys]{color:#a31515}
+[class^=yc]{color:#008000;font-style:italic}.ynf,.ync,.ynd{color:#795e26}.ynb,.ybp{color:#267f99}[class^=ym]{color:#098658}
 .ok{color:#1a7f37}.bad{color:#b42318;font-weight:600}
 ::highlight(same){background:#ffe58a}
 </style>"""
