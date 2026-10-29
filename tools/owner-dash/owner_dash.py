@@ -13,6 +13,7 @@ Run through bin/owner-dash, which provides its venv.
 """
 import argparse
 import ast
+import difflib
 import html
 import json
 import re
@@ -191,13 +192,50 @@ def parse_diff(text):
     return files
 
 
+def inline(old, new):
+    """One line showing a mostly-unchanged line's edit: removed words struck, added words marked; None when the
+    two lines share less than half their text, so they read better as a removed line and an added one."""
+    a, b = re.findall(r"\w+|\s+|[^\w\s]", old[1:]), re.findall(r"\w+|\s+|[^\w\s]", new[1:])
+    ops = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+    kept = sum(len("".join(a[i1:i2])) for tag, i1, i2, _, _ in ops if tag == "equal")
+    if kept * 2 < max(len(old), len(new)) - 1:
+        return None
+    out = ["~"]
+    for tag, i1, i2, j1, j2 in ops:
+        gone, added = html.escape("".join(a[i1:i2])), html.escape("".join(b[j1:j2]))
+        out.append(gone if tag == "equal" else (gone and f"<del>{gone}</del>") + (added and f"<ins>{added}</ins>"))
+    return "".join(out)
+
+
 def diff_html(path, hunks):
     rows = []
     for hunk in hunks:
         rows.append(f'<span class=dh>{html.escape(hunk["header"])}</span>')
-        for line in hunk["lines"]:
-            cls = {"+": "da", "-": "dd"}.get(line[:1], "dc")
-            rows.append(f"<span class={cls}>{html.escape(line)}</span>")
+        lines, i = hunk["lines"], 0
+        while i < len(lines):
+            minus = i
+            while minus < len(lines) and lines[minus][:1] == "-":
+                minus += 1
+            plus = minus
+            while plus < len(lines) and lines[plus][:1] == "+":
+                plus += 1
+            if minus > i and plus > minus:
+                olds, news, at = lines[i:minus], lines[minus:plus], 0
+                for old in olds:
+                    hit = next(((j, edit) for j in range(at, len(news)) if (edit := inline(old, news[j]))), None)
+                    if not hit:
+                        rows.append(f"<span class=dd>{html.escape(old)}</span>")
+                        continue
+                    j, edit = hit
+                    rows += [f"<span class=da>{html.escape(l)}</span>" for l in news[at:j]]
+                    rows.append(f"<span class=dm>{edit}</span>")
+                    at = j + 1
+                rows += [f"<span class=da>{html.escape(l)}</span>" for l in news[at:]]
+                i = plus
+                continue
+            line = lines[i]
+            rows.append(f'<span class={ {"+": "da", "-": "dd"}.get(line[:1], "dc") }>{html.escape(line)}</span>')
+            i += 1
     return f'<div class=diff><div class=df>{html.escape(path)}</div><pre>{"".join(rows)}</pre></div>'
 
 
@@ -437,8 +475,10 @@ tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#
 button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
-.diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}.diff pre span{display:block;padding:0 8px;white-space:pre}
+.diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}
+.diff pre span{display:block;padding:0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .da{background:#e6ffec}.dd{background:#ffebe9}.dh{color:#777;background:#f6f8fa}
+.dm{background:#fffbe6}.dm del{background:#ffc1bd;color:#86181d}.dm ins{background:#abf2bc;text-decoration:none}
 .ok{color:#1a7f37}.bad{color:#b42318;font-weight:600}
 ::highlight(same){background:#ffe58a}
 </style>"""
