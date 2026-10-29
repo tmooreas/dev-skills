@@ -51,9 +51,12 @@ introduced by this repository; the one service is the optional owner dashboard b
 
 `bin/owner-dash serve` serves posted PR walkthroughs, reviews and the PR matrix at
 `http://localhost:8765`; `bin/owner-dash put walkthrough N -`, `put review N file` and
-`put matrix -` post them, and `show` prints one back. It creates its own venv
-(`tools/owner-dash/requirements.txt`) on first run and stores posts under
-`~/.local/share/owner-dash/<project>/`.
+`put matrix -` post them, and `show` prints one back. A posted walkthrough stores the
+PR's diff (`--base <branch>` for stacked PRs), shows each hunk beside the sentence that
+names it, serves `--attach` files for download, and fails until every changed line is
+placed and every touched name is named; `check N` re-runs that at the current head.
+It creates its own venv (`tools/owner-dash/requirements.txt`) on first run and stores
+posts under `~/.local/share/owner-dash/<project>/`.
 
 ## Tracker collector and local verification
 

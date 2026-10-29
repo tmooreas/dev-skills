@@ -58,6 +58,11 @@ gates apply. Here:
 - Never ask the owner to approve a merge before a full pr-walkthrough of that PR
   (owner 2026-10-08). Once the owner has approved a PR, merge it when its gates pass;
   do not ask again (a later restack with no behaviour change keeps the approval).
+- Every walkthrough links only the PR's changes page: [#N](https://github.com/American-Securities/datapack-agent/pull/N/changes) (owner 2026-10-20).
+- Markdown edits (FEATURE_MAP, SKILL, references, docs) change only the words that must change, in place: never rewrite, reword or reflow a line or paragraph wholesale, so the owner's diff shows just the change (owner 2026-10-22). Every brief carries this rule.
+- Every walkthrough's Code section includes a "data journey": how the data flows from source to output through the changed code, before → after, illustrated with the actual code lines that move it (owner 2026-10-22).
+- Agent context is the orchestrator's job (owner 2026-10-23). Never send a review round or follow-up to a worker whose context is large (> ~150K tokens); long contexts bill as extra usage, not the weekly plan, and on 10-22 they exhausted the monthly spend cap and stalled every lane. Start a fresh agent instead, with a short handoff: worktree path, branch, head, what's done, what's left, the review file. Reviewers likewise: a fresh reviewer per round when the previous one is long.
+- Mechanical work goes to `dpa-mech` (Sonnet 5.5) in a tightly scoped brief (owner 2026-10-23): git syncs and merges from main, merge-on-green, golden rebakes to a stated spec, conflict resolution with a stated rule, worktree cleanup, CI reruns, PR body edits. Opus (`dpa-impl`) only for design, code changes that need judgment, and the walkthroughs.
 
 ## Speed rules (2026-10-07)
 
@@ -70,6 +75,9 @@ gates apply. Here:
 - Keep the next briefs approved ahead.
 
 ## Dev checks every implementer result carries
+
+- No new code comments (owner, DESIGN_agentic_practices §7/§12): every PR must NET REMOVE comments (owner 2026-10-26): `#` comment lines plus docstring lines, added minus removed, must be < 0 per PR, not merely ≤ 0. A PR at exactly 0 is a defect: delete stale or non-constraint comments in the touched files until the count is negative. Only constraint comments survive. Every brief says so; every result reports the count; every walkthrough states it plainly (e.g. "comments −3"), never "net zero".
+  Owner (2026-10-20): a comment or docstring the change touches or makes stale is DELETED, never rewritten into a "correct version". Pre-checks flag any rewritten comment as a defect.
 
 - Reuse inventory BEFORE writing each new function, constant, list or writer (CLAUDE.md,
   CONTRIBUTING "Reuse first"): `python dev/tools/inventory.py --grep <word>` over the

@@ -6,6 +6,13 @@ suppliers, pipeline, census) into an Excel datapack with live formulas, a draft 
 chat answers. Excel on native Windows is the numeric authority for formulas; the
 formula engine (`extract/formula_engine`) is the fast reader.
 
+## Length (owner, 2026-10-13)
+
+Small PRs (prose-only, comment strips, rebases, roughly ≤100 changed lines with no new
+behaviour) get a short walkthrough: what changed and why, the proof (outputs by path),
+the risks, comment count, and the ask. The full 12-section form is for PRs that change
+behaviour or outputs.
+
 ## Safety
 
 From WSL, Excel/COM tests and `powershell.exe` run on the owner's real desktop. A
@@ -49,6 +56,12 @@ deal's folder. No GitHub writes.
   tab with `extract.formula_engine.render_tab`. Quote the rendered rows, the QF line and
   the run record. Show the edge case by editing the copy's raw CSV (drop months, blank
   a column) and say what you changed.
+- Owner rule (10-12; attachments 10-29): section 5 attaches the actual outputs with
+  `owner-dash put walkthrough N - --attach <file>` and links each by file name: the
+  built workbook (`.xlsx`, recalculated, opened on the tab and cells the example quotes),
+  the deck PDF when the PR touches the deck, and for chat/run_cut/eval PRs the run record
+  JSON and the chat eval's output (graded case files / report) for the cases the example
+  uses. Name each file, tab and cell in the text.
 - Section 7 adds: Excel-on-Windows test results for this head (CI does not run COM),
   the golden-workbook delta (which tabs and cells), and the oracle
   (`dev/tools/deal_oracle.py`) where numbers move.
@@ -67,6 +80,8 @@ deal's folder. No GitHub writes.
   the signed cleaning report), or nobody (a finding).
 
 ## Extra antipatterns
+
+- **New code comments:** owner position (`dev/DESIGN_agentic_practices.md` §7, §12): every PR must net REMOVE comments (owner 2026-10-26): `#` comments plus docstring lines, added minus removed, < 0 (base vs head, tokenize/ast). 0 is a defect to fix before the walkthrough, not "net zero, fine". Allowed only: constraint comments ("do not remove", an external constraint with proof). Everything else becomes a name, a test name or a line in a `dev/` design doc. Report the count in section 9 as a signed number for comments and docstrings separately.
 
 - **Proof on clean synthetic data only:** NovaTech has calendar years, monthly rows,
   January customer starts, no missing values. A change touching periods, fiscal years,

@@ -79,15 +79,27 @@ Keep each section short; the owner can ask for more.
    - Mark new or changed boxes with `*`, and refusals with an `X-->` branch naming what
      is refused.
    - Where it helps, show before and after side by side.
-4. **How it works in the code:** the 3-6 places that matter, each as `file:line` plus
+4. **How it works in the code:** the places that matter, each as `file:line` plus
    one sentence on what that code does and why it is written that way. Name what each
    changed piece reads (its producer) and what reads it (its consumer).
+   - **Every touched function, class and module-level name is named here** in a code
+     span (`module.name` or `name`), so its diff lands beside the sentence. A purely
+     mechanical change (import, rename, moved call, signature passthrough) may share one
+     **Mechanical:** bullet that names each of them and says what the mechanical change is.
+   - Every changed line must land somewhere in the text: name the file (`PIPELINE.md`) or
+     the symbol for docs and other non-code hunks. `owner-dash check` enforces both.
+4a. **Reuse:** for each new function, constant, helper or writer: the search run for an
+    existing owner (command and capability words), the hits (`path:line`), and
+    reuse / distinct-because. "None new" when the PR adds none, with the reason.
 5. **A worked example:** real numbers from a real run (the orchestrator's smoke, or run
    it now): input -> what the code did -> what the user sees. Include one refusal or
    edge case. It must be the feature's main customer scenario, run by you (e.g. carry
    forward: polish a workbook, drop data, carry forward, see what survived); a refusal
    path or someone else's test is not a worked example. If you cannot run it, say so
-   and make no merge recommendation.
+   and make no merge recommendation. Whenever the example has an output file (a
+   workbook, deck, run record, report), attach the actual file
+   (`owner-dash put walkthrough N - --attach <file>`) and link it by file name in the
+   text (`[deal.xlsx](deal.xlsx)`), naming the tab and cells to look at.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
@@ -133,6 +145,10 @@ Keep each section short; the owner can ask for more.
 
 An adapter may add sections; it numbers them after the section they follow (9a, 9b), so
 the numbers above stay stable.
+
+Owner notes about walkthroughs are rules for every later walkthrough: add each one to
+this skill (or the project adapter, if project-specific) in the same turn, then commit
+and push it (see "Keeping this skill current").
 
 ## Antipattern checklist
 
@@ -202,9 +218,22 @@ Check each item against the diff.
 
 ## Post it
 
-After sending a walkthrough, post the same text:
-`<repo>/bin/owner-dash --project <repository-name> put walkthrough N -` (text on stdin).
+Post every walkthrough to the owner dashboard:
+`<repo>/bin/owner-dash --project <repository-name> --repo <owner/name> put walkthrough N -`
+(text on stdin; `--attach <file>` per output file; `--base <branch>` for a PR stacked
+on another PR, so the diff is its own lines). It stores the PR's diff and runs the
+checks: every changed line is placed beside the text, and every touched name is named
+(code in section 4, tests anywhere). It exits non-zero and lists what is missing; fix
+the text and post again until it passes, then send it in chat.
+`owner-dash … check N` refetches the diff at the current head and re-runs the checks.
 When the owner asks for a walkthrough you already wrote and the head has not moved,
-run `owner-dash … show walkthrough N` and paste its text into chat rather than writing it again.
-The owner reads posted walkthroughs, reviews and the matrix at `http://localhost:8765`
-(`owner-dash serve`).
+run `owner-dash … show walkthrough N` and paste its text rather than writing it again.
+The owner reads walkthroughs (with their diffs inline), reviews and the matrix at
+`http://localhost:8765` (`owner-dash serve`); matrix rows expand to the walkthrough.
+
+## Keeping this skill current
+
+When the owner changes how walkthroughs work, edit this file or the adapter, then
+commit only those lines and push: `git pull --ff-only`, `git add -p <file>`, commit,
+`git push`. Never reset, stash, rebase or overwrite edits that are not yours; if the
+branch has diverged, stop and say so.
