@@ -82,10 +82,16 @@ Keep each section short; the owner can ask for more.
 4. **How it works in the code:** the places that matter, each as `file:line` plus
    one sentence on what that code does and why it is written that way. Name what each
    changed piece reads (its producer) and what reads it (its consumer).
-   - **Every touched function, class and module-level name is named here** in a code
-     span (`module.name` or `name`), so its diff lands beside the sentence. A purely
-     mechanical change (import, rename, moved call, signature passthrough) may share one
-     **Mechanical:** bullet that names each of them and says what the mechanical change is.
+   - **Every touched function, class and module-level name is explained here,** in a
+     code span (`module.name` or `name`) so its diff lands beside the sentence: what
+     changed in it and why. Caution (owner 2026-10-29): a changed method the text does
+     not explain reads as hidden, and the owner stops trusting the PR. Naming it is not
+     enough; say what changed and why, even if it is one clause. A purely mechanical
+     change (import, rename, moved call, signature passthrough) may share one
+     **Mechanical:** bullet, but each name in it still gets its own clause saying what
+     the mechanical change was (`_route_decisions`: reads through `read_yaml`, nothing
+     else). If you cannot say why a method changed, find out before posting; an
+     unexplained change is a finding, not a gap to paper over.
    - Every changed line must land somewhere in the text: name the file (`PIPELINE.md`) or
      the symbol for docs and other non-code hunks. `owner-dash check` enforces both.
 4a. **Reuse:** for each new function, constant, helper or writer: the search run for an
