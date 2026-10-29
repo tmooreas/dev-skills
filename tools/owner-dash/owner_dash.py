@@ -396,7 +396,9 @@ def with_walkthroughs(base, matrix_html):
             return row.group(0)
         width = row.group(0).count("<td")
         return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}'
-                f'</summary>{render_walkthrough(path)}</details></td></tr>')
+                f'</summary>{render_walkthrough(path)}<button class=fold onclick="var d=this.closest(\'details\');'
+                f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
+                f'</button></details></td></tr>')
     head, sep, rest = matrix_html.partition("</table>")
     return re.sub(r"<tr>\s*<td.*?</tr>", expand, head, flags=re.S) + sep + rest
 
@@ -407,6 +409,7 @@ a{color:#0b5cad}table{border-collapse:collapse;margin:12px 0}td,th{border:1px so
 th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overflow-x:auto}code{background:#f3f3f3;padding:0 3px}
 nav{margin-bottom:16px}nav a{margin-right:16px;font-weight:600}.when{color:#777;font-size:13px;margin-left:8px}
 tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#0b5cad;font-size:13px}
+button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
 .diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}.diff pre span{display:block;padding:0 8px;white-space:pre}
