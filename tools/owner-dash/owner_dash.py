@@ -59,11 +59,25 @@ def render(md):
     return MARKDOWN.render(md)
 
 
+def with_walkthroughs(base, matrix_html):
+    def expand(row):
+        found = re.search(r"#(\d+)", row.group(0))
+        path = found and base / "walkthroughs" / f"pr{found.group(1)}.md"
+        if not path or not path.is_file():
+            return row.group(0)
+        width = row.group(0).count("<td")
+        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}'
+                f'</summary>{render(path.read_text(encoding="utf-8"))}</details></td></tr>')
+    head, sep, rest = matrix_html.partition("</table>")
+    return re.sub(r"<tr>\s*<td.*?</tr>", expand, head, flags=re.S) + sep + rest
+
+
 STYLE = """<style>
 body{font:15px/1.5 system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#222}
 a{color:#0b5cad}table{border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ccc;padding:4px 8px;vertical-align:top}
 th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overflow-x:auto}code{background:#f3f3f3;padding:0 3px}
 nav{margin-bottom:16px}nav a{margin-right:16px;font-weight:600}.when{color:#777;font-size:13px;margin-left:8px}
+tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#0b5cad;font-size:13px}
 </style>"""
 
 
@@ -89,7 +103,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(page(None, "Not found", "<p>No such project.</p>"), 404)
         if len(parts) == 1:
             matrix = base / "matrix.md"
-            body = render(matrix.read_text(encoding="utf-8")) if matrix.is_file() else "<p>No matrix posted.</p>"
+            body = with_walkthroughs(base, render(matrix.read_text(encoding="utf-8"))) if matrix.is_file() \
+                else "<p>No matrix posted.</p>"
             return self.send(page(project, f"{project} matrix", body))
         folder = base / parts[1]
         if parts[1] not in (f"{k}s" for k in KINDS):
