@@ -51,7 +51,8 @@ def put(args):
     path = target(args.project, args.kind, args.number)
     path.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    path.write_text(f"*Posted {stamp}*\n\n{text.strip()}\n", encoding="utf-8")
+    body = re.sub(r"\A\s*\*Posted [^*\n]*\*\s*", "", text)
+    path.write_text(f"*Posted {stamp}*\n\n{body.strip()}\n", encoding="utf-8")
     print(path)
     if args.kind == "walkthrough":
         folder = path.with_suffix(".files")
