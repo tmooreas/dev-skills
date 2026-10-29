@@ -415,14 +415,33 @@ details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;fon
 .diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}.diff pre span{display:block;padding:0 8px;white-space:pre}
 .da{background:#e6ffec}.dd{background:#ffebe9}.dh{color:#777;background:#f6f8fa}
 .ok{color:#1a7f37}.bad{color:#b42318;font-weight:600}
+::highlight(same){background:#ffe58a}
 </style>"""
+
+SAME_WORD = """<script>
+document.addEventListener("selectionchange", () => {
+  if (!window.CSS || !CSS.highlights) return;
+  CSS.highlights.delete("same");
+  const word = String(getSelection()).trim();
+  if (!/^\\w{2,}$/.test(word)) return;
+  const find = new RegExp(`(?<!\\\\w)${word}(?!\\\\w)`, "g"), ranges = [];
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node; (node = walk.nextNode()) && ranges.length < 5000;) {
+    for (const m of node.data.matchAll(find)) {
+      const r = new Range(); r.setStart(node, m.index); r.setEnd(node, m.index + word.length); ranges.push(r);
+    }
+  }
+  CSS.highlights.set("same", new Highlight(...ranges));
+});
+</script>"""
 
 
 def page(project, title, body):
     nav = "".join(f'<a href="/{p.name}/">{html.escape(p.name)}</a>' for p in sorted(ROOT.glob("*/")) if p.is_dir())
     sub = "" if not project else (f'<nav><a href="/{project}/">Matrix</a><a href="/{project}/walkthroughs/">Walkthroughs</a>'
                                   f'<a href="/{project}/reviews/">Reviews</a></nav>')
-    return f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
+    return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
+            f"{SAME_WORD}")
 
 
 def pr_number(path):
