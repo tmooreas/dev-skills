@@ -199,3 +199,12 @@ Check each item against the diff.
   through the old and the moved code, same output) and a line-count explanation (lines
   added vs deleted: moved code, new docs, new tests, wiring), because a move that grows
   is the first thing the owner will ask about.
+
+## Post it
+
+After sending a walkthrough, post the same text:
+`<repo>/bin/owner-dash --project <repository-name> put walkthrough N -` (text on stdin).
+When the owner asks for a walkthrough you already wrote and the head has not moved,
+run `owner-dash … show walkthrough N` and paste its text into chat rather than writing it again.
+The owner reads posted walkthroughs, reviews and the matrix at `http://localhost:8765`
+(`owner-dash serve`).

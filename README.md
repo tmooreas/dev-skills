@@ -10,6 +10,7 @@ architecture contracts, priorities and production permissions.
 | [review-pr](skills/review-pr/SKILL.md) | Seven review questions, helper ownership, actual consumer proof, mutations/near misses, historical comparisons and exact-head verdicts. |
 | [issue-queue](skills/issue-queue/SKILL.md) | Current-main backlog reconciliation, next-action sequencing and executed proof before issue closure. |
 | [pr-walkthrough](skills/pr-walkthrough/SKILL.md) | Owner-facing walkthrough of one PR at its current head: plain language, an ASCII flow diagram, code places, a worked example, proof, whether each test earns its place, and an antipattern check that stops on the first finding. Per-project adapters live in `skills/pr-walkthrough/projects/`. |
+| [pr-matrix](skills/pr-matrix/SKILL.md) | Ranks the PRs ready to merge so the owner approves the best ones first. |
 
 ## Use
 
@@ -43,8 +44,16 @@ Keep the skills together so their sibling references resolve.
 Owner approval, reviewer PASS, current-head CI, merge and deployment remain
 separate permissions. Invoking a skill grants none of them implicitly. Cheaper
 mechanical execution is bounded to a verified allowlist, not conflict resolution
-or correctness review. No service, orchestrator launcher or model dependency is
-introduced by this repository.
+or correctness review. No orchestrator launcher or model dependency is
+introduced by this repository; the one service is the optional owner dashboard below.
+
+## Owner dashboard
+
+`bin/owner-dash serve` serves posted PR walkthroughs, reviews and the PR matrix at
+`http://localhost:8765`; `bin/owner-dash put walkthrough N -`, `put review N file` and
+`put matrix -` post them, and `show` prints one back. It creates its own venv
+(`tools/owner-dash/requirements.txt`) on first run and stores posts under
+`~/.local/share/owner-dash/<project>/`.
 
 ## Tracker collector and local verification
 

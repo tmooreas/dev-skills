@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run tools/owner-dash with its own venv, created on first use and refreshed when requirements change.
+set -eu
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tools/owner-dash" && pwd)"
+venv="$dir/.venv"
+req="$dir/requirements.txt"
+if [ ! -x "$venv/bin/python" ] || ! cmp -s "$req" "$venv/requirements.txt"; then
+  python3 -m venv "$venv" >&2
+  "$venv/bin/pip" install -q -r "$req" >&2
+  cp "$req" "$venv/requirements.txt"
+fi
+exec "$venv/bin/python" "$dir/owner_dash.py" "$@"

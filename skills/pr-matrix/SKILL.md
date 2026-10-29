@@ -73,4 +73,7 @@ Under the table:
 3. **Known conflicts** between ranked PRs, and which one has to fix it when it
    lands second.
 
-Read-only. Approvals and merges go through the tracker's merge gate.
+Read-only toward the repository. Approvals and merges go through the tracker's merge gate.
+After sending, post the same text with
+`<repo>/bin/owner-dash --project <repository-name> put matrix -`; the owner reads it at
+`http://localhost:8765`.

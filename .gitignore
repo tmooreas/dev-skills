@@ -1,3 +1,4 @@
 __pycache__/
 *.py[cod]
 skills/tracker/tests/_mutants/
+tools/owner-dash/.venv/
