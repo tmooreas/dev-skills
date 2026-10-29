@@ -209,7 +209,8 @@ def inline(old, new):
 
 
 def diff_html(path, hunks):
-    rows = []
+    """Prose (.md) shows an edited line once with its changed words marked; code keeps plain removed/added lines."""
+    rows, prose = [], path.endswith(".md")
     for hunk in hunks:
         rows.append(f'<span class=dh>{html.escape(hunk["header"])}</span>')
         lines, i = hunk["lines"], 0
@@ -220,7 +221,7 @@ def diff_html(path, hunks):
             plus = minus
             while plus < len(lines) and lines[plus][:1] == "+":
                 plus += 1
-            if minus > i and plus > minus:
+            if prose and minus > i and plus > minus:
                 olds, news, at = lines[i:minus], lines[minus:plus], 0
                 for old in olds:
                     hit = next(((j, edit) for j in range(at, len(news)) if (edit := inline(old, news[j]))), None)
