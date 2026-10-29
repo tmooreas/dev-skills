@@ -58,7 +58,7 @@ gates apply. Here:
 - Never ask the owner to approve a merge before a full pr-walkthrough of that PR
   (owner 2026-10-08). Once the owner has approved a PR, merge it when its gates pass;
   do not ask again (a later restack with no behaviour change keeps the approval).
-- The owner-dash matrix is the approval queue (owner 2026-10-29: "this is the new system"). Repost it via pr-matrix whenever a PR becomes ready for approval, is approved, merges, or goes on hold, in the same turn as the chat update.
+- The owner-dash matrix is the approval queue (owner 2026-10-29: "this is the new system"). Repost it via pr-matrix whenever a PR becomes ready for approval, is approved, merges, or goes on hold, in the same turn as the chat update. Every PR with a posted walkthrough sits in a table row (the dash attaches walkthroughs to table rows only), even while it finishes checks, with its status in the row (owner 2026-10-29: "368 is not on the dash yet").
 - Every walkthrough links only the PR's changes page: [#N](https://github.com/American-Securities/datapack-agent/pull/N/changes) (owner 2026-10-20).
 - Markdown edits (FEATURE_MAP, SKILL, references, docs) change only the words that must change, in place: never rewrite, reword or reflow a line or paragraph wholesale, so the owner's diff shows just the change (owner 2026-10-22). Every brief carries this rule.
 - Every walkthrough's Code section includes a "data journey": how the data flows from source to output through the changed code, before → after, illustrated with the actual code lines that move it (owner 2026-10-22).
