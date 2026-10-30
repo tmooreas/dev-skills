@@ -490,8 +490,7 @@ def with_walkthroughs(base, matrix_html):
                 f'</summary>{render_walkthrough(path)}<button class=fold onclick="var d=this.closest(\'details\');'
                 f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
                 f'</button></details></td></tr>')
-    head, sep, rest = matrix_html.partition("</table>")
-    body = re.sub(r"<tr>\s*<td.*?</tr>", expand, head, flags=re.S) + sep + rest
+    body = re.sub(r"<tr>\s*<td.*?</tr>", expand, matrix_html, flags=re.S)
     note = ("<p class=when>Could not ask GitHub which PRs are open; showing every row.</p>" if still_open is None
             else f"<p class=when>Hidden, merged or closed: {', '.join(gone)}</p>" if gone else "")
     return note + body
