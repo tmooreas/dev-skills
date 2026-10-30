@@ -98,8 +98,21 @@ Keep each section short; the owner can ask for more.
      change (import, rename, moved call, signature passthrough) may share one
      **Mechanical:** bullet, but each name in it still gets its own clause saying what
      the mechanical change was (`_route_decisions`: reads through `read_yaml`, nothing
-     else). If you cannot say why a method changed, find out before posting; an
-     unexplained change is a finding, not a gap to paper over.
+    else). If you cannot say why a method changed, find out before posting; an
+    unexplained change is a finding, not a gap to paper over.
+  - **Depth scales with complexity** (owner 2026-10-29, on a 165-line diff with five
+    parsers explained in one sentence each: "not detailed enough ... Not good"). A
+    function with branching, parsing, a loop over cells or more than ~15 changed lines
+    gets its own sub-bullets, not a clause:
+    - **Input → output:** what it takes and returns, with one real value each
+      (`_pairs` takes `"=SUM(B3:B5)"` and gives …).
+    - **The rule:** each branch or case in plain words, in the order the code checks
+      them, and what each one returns.
+    - **A worked example** that goes through it end to end, and one edge case it
+      refuses or lists.
+    - **What changed:** what it did before this PR, and why it changed.
+    "Moved out of the loop with the same results" never explains a function; it is
+    only the "what changed" line, and the function still needs the rest.
    - Every changed line must land somewhere in the text: name the file (`PIPELINE.md`) or
      the symbol for docs and other non-code hunks. `owner-dash check` enforces both.
 4a. **Reuse:** for each new function, constant, helper or writer: the search run for an
