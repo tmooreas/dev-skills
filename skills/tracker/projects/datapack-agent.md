@@ -30,6 +30,8 @@ generic skill only with the owner's say-so.
 
 /tmp is a 7.7 GB RAM disk on this machine, shared with the esr project's agents. Scratch worktrees, venvs, temp deal copies and pytest's basetemp go under `~/scratch` (launch workers with `TMPDIR=~/scratch/tmp`), never /tmp. pytest runs with `-n 4` at most, never `-n auto`. Load one large workbook at a time. Smokes copy deals to `~/scratch`, not `/tmp`.
 
+Agents share this machine with the orchestrator's local test suites. To stop a process, kill only the PIDs you started; never pattern kills (`pkill -f pytest`, `killall python`). On 2026-10-29 one such kill stopped two merge-gate suites mid-run.
+
 ## Launch recipe
 
 Workers run in tmux inside WSL (owner 2026-10-08), session `dpa`, one window per lane:
