@@ -3,6 +3,7 @@
 
     owner-dash --repo owner/name put walkthrough 362 file.md     (or - for stdin; also stores the PR's diff)
     owner-dash put review 362 file.md
+    owner-dash put brief settings-match file.md                  (a brief awaiting or past owner approval, by name)
     owner-dash put matrix file.md
     owner-dash show walkthrough 362
     owner-dash serve [--port 8765]
@@ -36,7 +37,8 @@ from pygments.token import STANDARD_TYPES
 
 ROOT = Path(environ.get("OWNER_DASH_DIR", Path.home() / ".local/share/owner-dash"))
 MARKDOWN = MarkdownIt("commonmark", {"linkify": False}).enable("table")
-KINDS = ("walkthrough", "review")
+KINDS = ("walkthrough", "review", "brief")
+BRIEF_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 def default_project():
@@ -46,7 +48,13 @@ def default_project():
 
 def target(project, kind, number=None):
     base = ROOT / project
-    return base / "matrix.md" if kind == "matrix" else base / f"{kind}s" / f"pr{number}.md"
+    if kind == "matrix":
+        return base / "matrix.md"
+    if kind == "brief":
+        if not BRIEF_NAME.fullmatch(number):
+            sys.exit(f"owner-dash: a brief's name is lowercase letters, digits and dashes, not {number!r}")
+        return base / "briefs" / f"{number}.md"
+    return base / f"{kind}s" / f"pr{number}.md"
 
 
 def put(args):
@@ -575,7 +583,7 @@ document.addEventListener("selectionchange", () => {
 def page(project, title, body):
     nav = "".join(f'<a href="/{p.name}/">{html.escape(p.name)}</a>' for p in sorted(ROOT.glob("*/")) if p.is_dir())
     sub = "" if not project else (f'<nav><a href="/{project}/">Matrix</a><a href="/{project}/walkthroughs/">Walkthroughs</a>'
-                                  f'<a href="/{project}/reviews/">Reviews</a></nav>')
+                                  f'<a href="/{project}/reviews/">Reviews</a><a href="/{project}/briefs/">Briefs</a></nav>')
     return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
             f"{SCRIPT}")
 
@@ -602,6 +610,13 @@ class Handler(BaseHTTPRequestHandler):
         folder = base / parts[1]
         if parts[1] not in (f"{k}s" for k in KINDS):
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
+        if len(parts) == 2 and parts[1] == "briefs":
+            files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True) if folder.is_dir() else []
+            body = "<h1>Briefs</h1><ul>" + "".join(
+                f'<li><a href="/{project}/briefs/{f.name}">{html.escape(f.stem)}</a>'
+                f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
+                for f in files) + "</ul>"
+            return self.send(page(project, "briefs", body))
         if len(parts) == 2:
             files = sorted(folder.glob("pr*.md"), key=pr_number, reverse=True) if folder.is_dir() else []
             still_open = open_prs(base)
@@ -685,8 +700,8 @@ def main():
         sys.exit(1 if failed else 0)
     need = (1 if args.kind == "matrix" else 2) - (args.command == "show")
     if len(args.rest) != need:
-        parser.error(f"{args.command} {args.kind} takes {'<N> ' if args.kind != 'matrix' else ''}"
-                     f"{'<file|->' if args.command == 'put' else ''}".strip())
+        key = {"matrix": "", "brief": "<name> "}.get(args.kind, "<N> ")
+        parser.error(f"{args.command} {args.kind} takes {key}{'<file|->' if args.command == 'put' else ''}".strip())
     args.number = None if args.kind == "matrix" else args.rest[0]
     args.file = args.rest[-1] if args.command == "put" else None
     (put if args.command == "put" else show)(args)

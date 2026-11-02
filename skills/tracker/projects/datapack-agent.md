@@ -66,6 +66,7 @@ gates apply. Here:
 - Every walkthrough's Code section includes a "data journey": how the data flows from source to output through the changed code, before → after, illustrated with the actual code lines that move it (owner 2026-10-22).
 - Agent context is the orchestrator's job (owner 2026-10-23). Never send a review round or follow-up to a worker whose context is large (> ~150K tokens); long contexts bill as extra usage, not the weekly plan, and on 10-22 they exhausted the monthly spend cap and stalled every lane. Start a fresh agent instead, with a short handoff: worktree path, branch, head, what's done, what's left, the review file. Reviewers likewise: a fresh reviewer per round when the previous one is long.
 - Mechanical work goes to `dpa-mech` (Sonnet 5.5) in a tightly scoped brief (owner 2026-10-23): git syncs and merges from main, merge-on-green, golden rebakes to a stated spec, conflict resolution with a stated rule, worktree cleanup, CI reruns, PR body edits. Opus (`dpa-impl`) only for design, code changes that need judgment, and the walkthroughs.
+- Every brief goes on the owner dashboard (owner 2026-11-02): `owner-dash --project datapack-agent put brief <name> <file>` when it is first shown to the owner, and again on every change. Its name matches the file in `~/dpa-lanes/briefs/`. The first line under the title states its status: awaiting approval, approved (date), or done (PR links).
 
 ## Speed rules (2026-10-07)
 
