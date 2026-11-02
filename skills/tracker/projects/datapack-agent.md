@@ -81,7 +81,7 @@ gates apply. Here:
   `/mnt/c/CodeProjects/_dpa_scratch/venv312/Scripts/python.exe` for Excel/COM); CI is
   the full-suite gate.
 - A reviewer's non-blocking notes become follow-ups, not another round.
-- Reviews go to `dpa-review` (GPT) again (owner 2026-11-02, "we should have gpt back for reviews now"): a fresh session each round, independent of the implementer. Claude `reviewer` only when dpa-review is unavailable, and say so in the ledger.
+- Reviews go to `dpa-review` (GPT) again (owner 2026-11-02, "we should have gpt back for reviews now"), on `openai-codex/gpt-6.1-sol` (owner 2026-11-02, "6.1 sol"): a fresh session each round, independent of the implementer. Claude `reviewer` only when dpa-review is unavailable, and say so in the ledger.
 - Keep the next briefs approved ahead.
 
 ## Dev checks every implementer result carries
