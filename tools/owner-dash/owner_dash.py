@@ -164,7 +164,6 @@ def name_at(found, line):
 
 
 def touched_names(repo, old_ref, new_ref, files):
-    """{path: [names per hunk]}: the enclosing definition of every changed line, read from both versions."""
     py = [f for f in files if f["path"].endswith(".py")]
     with ThreadPoolExecutor(8) as pool:
         old = list(pool.map(lambda f: spans(source(repo, old_ref, f["old"])), py))
@@ -176,17 +175,17 @@ def touched_names(repo, old_ref, new_ref, files):
         per_hunk = []
         for hunk in f["hunks"]:
             a, c = (int(n) for n in re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)", hunk["header"]).groups())
-            names = set()
+            names = []
             for line in hunk["lines"]:
-                kind, body = line[:1], line[1:]
-                if kind == "-" and body.strip() and (n := name_at(old_spans, a)):
-                    names.add(n)
-                if kind == "+" and body.strip() and (n := name_at(new_spans, c)):
-                    names.add(n)
+                kind = line[:1]
+                names.append(name_at(old_spans, a) if kind == "-" else name_at(new_spans, c) if kind in " +" else None)
                 a += kind in " -"
                 c += kind in " +"
-            per_hunk.append(sorted(names))
-        result[f["path"]] = per_hunk
+            per_hunk.append(names)
+        spans_of = {}
+        for first, last, name in new_spans:
+            spans_of.setdefault(name, []).append([first, last])
+        result[f["path"]] = {"hunks": per_hunk, "spans": spans_of}
     return result
 
 
@@ -280,22 +279,69 @@ def diff_html(path, hunks):
 DEF = re.compile(r"\s*(?:async\s+)?(?:def|class)\s+(\w+)")
 
 
-def touched(hunk):
-    """Names whose lines this hunk changes: from the parsed sources when stored, else the diff's def lines."""
-    if "names" in hunk:
-        return set(hunk["names"])
-    context = hunk["header"].split("@@")[-1]
-    current = (DEF.match(context) or [None, None])[1]
-    names = set()
+def line_names(path, hunk):
+    if "defs" in hunk:
+        return hunk["defs"]
+    if not path.endswith(".py"):
+        return [None] * len(hunk["lines"])
+    current = (DEF.match(hunk["header"].split("@@")[-1]) or [None, None])[1]
+    names = []
     for line in hunk["lines"]:
         body = line[1:]
         if m := DEF.match(body):
             current = m.group(1)
         elif body[:1] not in ("", " ", "\t", "#", "@", ")", "]", "}"):
             current = (re.match(r"(\w+)\s*[:=]", body) or [None, None])[1]
-        if line[:1] in "+-" and body.strip() and current:
-            names.add(current)
+        names.append(current)
     return names
+
+
+def pieces(path, hunk):
+    lines, names = hunk["lines"], line_names(path, hunk)
+    c = int(re.match(r"@@ -\d+(?:,\d+)? \+(\d+)", hunk["header"]).group(1))
+    at, runs, run = [], [], []
+    for k, line in enumerate(lines):
+        at.append(c)
+        c += line[:1] in " +"
+        if line[:1] != " ":
+            run.append(k)
+        elif run:
+            runs, run = runs + [run], []
+    parts, new_side = [], {n for n, l in zip(names, lines) if l[:1] in " +"}
+    for run in runs + [run]:
+        real = [k for k in run if lines[k][:1] in "+-" and lines[k][1:].strip()]
+        name = names[real[0]] if real else None
+        for k in run:
+            name = names[k] if k in real else name
+            if lines[k][:1] not in "+-":
+                continue
+            if parts and parts[-1][0][-1] == name and k - parts[-1][2] <= 5:
+                parts[-1][2] = k
+            elif (parts and parts[-1][2] == k - 1 and lines[k - 1][:1] + lines[k][:1] == "-+"
+                  and parts[-1][0][-1] and parts[-1][0][-1] not in new_side):
+                parts[-1][0].append(name)
+                parts[-1][2] = k
+            else:
+                parts.append([[name], k, k])
+    out = []
+    for n, (owners, first, last) in enumerate(parts):
+        lo = parts[n - 1][2] + 1 if n else 0
+        hi = parts[n + 1][1] - 1 if n + 1 < len(parts) else len(lines) - 1
+        start, end = first, last
+        while start > max(lo, first - 2) and lines[start - 1][:1] == " " and names[start - 1] in owners:
+            start -= 1
+        while end < hi and (lines[end + 1][:1] == "\\" or end < last + 2 and lines[end + 1][:1] == " "
+                            and names[end + 1] in owners):
+            end += 1
+        owners = [o for o in owners if o]
+        real = [at[k] for k in range(first, last + 1) if lines[k][:1] in "+-" and lines[k][1:].strip()] or [at[first]]
+        out.append({"header": " ".join([f"{Path(path).name}:{at[start]}", ", ".join(owners)]).strip(),
+                    "lines": lines[start:end + 1], "names": owners, "span": (real[0], real[-1])})
+    return out
+
+
+def touched(piece):
+    return set(piece["names"])
 
 
 def load_diff(path):
@@ -304,14 +350,20 @@ def load_diff(path):
     names_file = path.with_suffix(".names.json")
     names = json.loads(names_file.read_text(encoding="utf-8")) if names_file.is_file() else {}
     for f in files:
-        for hunk, found in zip(f["hunks"], names.get(f["path"], [])):
-            hunk["names"] = found
+        stored = names.get(f["path"], {})
+        for hunk, found in zip(f["hunks"], stored.get("hunks", [])):
+            hunk["defs"] = found
+        f["spans"] = stored.get("spans")
+        f["pieces"] = [p for h in f["hunks"] for p in pieces(f["path"], h)]
+        for p in f["pieces"]:
+            p["outer"] = sorted({n for n, found in (f["spans"] or {}).items() for first, last in found
+                                 if first <= p["span"][0] and p["span"][1] <= last} - touched(p))
     return raw, files
 
 
 def units(files):
     """(path, name) for every touched name in a .py file."""
-    return sorted({(f["path"], n) for f in files if f["path"].endswith(".py") for h in f["hunks"] for n in touched(h)})
+    return sorted({(f["path"], n) for f in files if f["path"].endswith(".py") for h in f["pieces"] for n in touched(h)})
 
 
 def section(md, number):
@@ -334,67 +386,94 @@ def is_test(path):
 
 
 def mentions(hunk, names):
-    text = hunk["header"] + "\n" + "\n".join(l for l in hunk["lines"] if l[:1] in "+-")
-    return bool(touched(hunk) & set(names)) or any(re.search(rf"\b{re.escape(n)}\b", text) for n in names)
+    text = "\n".join(l for l in hunk["lines"] if l[:1] in "+-")
+    return bool((touched(hunk) | set(hunk["outer"])) & set(names)) or any(re.search(rf"\b{re.escape(n)}\b", text)
+                                                                        for n in names)
 
 
 def hunks_for(span, files):
-    """(file, hunk, strength, by file) for a code span: strength 3 names the hunk's own definition, 2 a name its lines
-    use, 1 only its file; by file when the span names the file."""
+    span = re.sub(r"^([\w.]+)\(.*\)$", r"\1", span)
     parts = [p for p in re.split(r"[./:()\s,]+", span) if p]
+    method = re.fullmatch(r"([A-Za-z_]\w*)\.([A-Za-z_]\w*)", span)
+    head = span.split(":")[0]
     found = []
     for f in files:
         path = Path(f["path"])
-        if path.stem in parts or f["path"].endswith(span.split(":")[0]):
-            names = [p for p in parts if p not in (path.stem, path.suffix[1:]) and not p.isdigit()]
-            found += [(f, h, strength(h, names), True) for h in f["hunks"] if not names or mentions(h, names)]
+        if ("/" + f["path"]).endswith("/" + head) if "/" in head else path.stem in parts:
+            names = [p for p in parts if p not in path.parts and p not in (path.stem, path.suffix[1:]) and not p.isdigit()]
+            found += [(f, h, strength(h, names), True) for h in f["pieces"] if not names or mentions(h, names)]
+        elif method:
+            found += [(f, h, 4, False) for h in f["pieces"]
+                      if method.group(2) in touched(h) and (f["spans"] is None or method.group(1) in h["outer"])]
         elif len(parts) == 1 and re.fullmatch(r"[A-Za-z_]\w*", span) and (
-                "_" in span or re.search(r"[a-z][A-Z]", span) or any(span in touched(h) for h in f["hunks"])):
-            found += [(f, h, strength(h, parts), False) for h in f["hunks"] if mentions(h, parts)]
+                "_" in span or re.search(r"[a-z][A-Z]", span) or any(span in touched(h) for h in f["pieces"])):
+            found += [(f, h, strength(h, parts), False) for h in f["pieces"] if mentions(h, parts)]
     return found
 
 
 def strength(hunk, names):
-    return 1 if not names else 3 if touched(hunk) & set(names) else 2
+    return 1 if not names else 4 if touched(hunk) & set(names) else 3 if set(hunk["outer"]) & set(names) else 2
 
 
 def changed(hunk):
     return sum(1 for l in hunk["lines"] if l[:1] in "+-")
 
 
-def place(path):
-    """Walkthrough tokens with each changed hunk shown once, after the paragraph that explains it best.
+REF = re.compile(r"(?:([\w./-]+\.\w+))?:(\d+)(?:[–-](\d+))?")
 
-    Best: names the hunk's own definition over a name it only uses over its bare file; then the paragraph that also
-    names the hunk's file; then the one in the section that owns it (4 for code, 8 for tests); then the paragraph
-    naming the fewest hunks; then the first.
-    """
+
+def cites(f, h, cited):
+    mine = [(lo, hi) for file, lo, hi in cited if not file or ("/" + f["path"]).endswith("/" + file)]
+    if not cited:
+        return 2
+    if any(lo <= h["span"][1] and hi >= h["span"][0] for lo, hi in mine):
+        return 0
+    if mine and (f["spans"] is None or any(lo <= last and hi >= first for lo, hi in mine for n in touched(h)
+                                           for first, last in f["spans"].get(n, []))):
+        return 1
+    return 3
+
+
+def place(path):
     raw, files = load_diff(path)
     tokens = MARKDOWN.parse(path.read_text(encoding="utf-8"))
     claims, sections, current, number = {}, {}, [], None
     for i, token in enumerate(tokens):
         if token.type == "inline":
             number = m.group(1) if (m := re.match(r"\s*\*\*(\d+a?)\.", token.content)) else number
-            current += [m for child in token.children or [] if child.type == "code_inline"
-                        for m in hunks_for(child.content, files)]
+            children, words = token.children or [], 0
+            for k, child in enumerate(children):
+                if child.type == "code_inline":
+                    after = re.match(r"\s*(\([^)]*\))?", children[k + 1].content if k + 1 < len(children) else "")
+                    cited = [(m.group(1), int(m.group(2)), int(m.group(3) or m.group(2)))
+                             for m in REF.finditer(child.content + " " + after.group(0))]
+                    lead = words <= 3 or bool(re.match(r"\([\w./-]*:\d", after.group(1) or ""))
+                    current += [(f, h, s, by_file, lead and s >= 3, cites(f, h, cited))
+                                for f, h, s, by_file in hunks_for(child.content, files)]
+                    words += len(child.content.split())
+                else:
+                    tail = re.split(r"[.!?:](?:\s|$)", child.content)
+                    words = (words if len(tail) == 1 else 0) + len(tail[-1].split())
         elif token.type == "paragraph_close" and current:
             claims[i], sections[i], current = current, number, []
     best = {}
     for i, found in claims.items():
-        breadth, named = len({id(h) for _, h, _, _ in found}), {f["path"] for f, _, _, by_file in found if by_file}
-        for f, h, s, _ in found:
-            key = (-s, f["path"] not in named, sections[i] != ("8" if is_test(f["path"]) else "4"), breadth, i)
+        breadth, named = len({id(h) for _, h, *_ in found}), {f["path"] for f, _, _, by_file, *_ in found if by_file}
+        for f, h, s, by_file, lead, cited in found:
+            key = (s < 3, sections[i] != ("8" if is_test(f["path"]) else "4"), cited, s == 3, not lead,
+                   0 if by_file else 1 if f["path"] in named else 2, -s, breadth, i)
             if id(h) not in best or key < best[id(h)][0]:
                 best[id(h)] = (key, i, f)
     out = []
     for i, token in enumerate(tokens):
         out.append(token)
         by_file = {}
-        for f, h in {id(h): (f, h) for f, h, _, _ in claims.get(i, []) if best[id(h)][1] == i}.values():
+        for f, h in {id(h): (f, h) for f, h, *_ in claims.get(i, []) if best[id(h)][1] == i}.values():
             by_file.setdefault(f["path"], []).append(h)
         if not by_file:
             continue
-        blocks = "".join(diff_html(p, hs) for p, hs in sorted(by_file.items(), key=lambda i: is_test(i[0])))
+        blocks = "".join(diff_html(p, sorted(hs, key=lambda h: h["span"]))
+                         for p, hs in sorted(by_file.items(), key=lambda i: is_test(i[0])))
         block = Token("html_block", "", 0)
         block.content = (f"<details class=dx><summary>diff: {sum(changed(h) for hs in by_file.values() for h in hs)}"
                          f" lines</summary>{blocks}</details>")
@@ -403,7 +482,7 @@ def place(path):
 
 
 def unplaced(files, placed):
-    return [(f, h) for f in files for h in f["hunks"] if id(h) not in placed and changed(h)]
+    return [(f, h) for f in files for h in f["pieces"] if id(h) not in placed and changed(h)]
 
 
 def coverage(path, files, placed):
@@ -419,7 +498,7 @@ def coverage_report(path):
     total, missing, names = coverage(path, files, placed)
     lines = [f"owner-dash: diff at {head}: {total - sum(changed(h) for _, h in missing)}/{total} changed lines placed; "
              f"{len(names)} touched names not mentioned (code: section 4; tests: anywhere)"]
-    lines += [f"  not placed: {f['path']} {h['header'].split('@@')[1].strip()} ({changed(h)} lines)" for f, h in missing]
+    lines += [f"  not placed: {f['path']} {h['header']} ({changed(h)} lines)" for f, h in missing]
     lines += [f"  not mentioned: {p} {n}" for p, n in names]
     return bool(missing or names), "\n".join(lines)
 
