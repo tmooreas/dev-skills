@@ -4,6 +4,7 @@
     owner-dash --repo owner/name put walkthrough 362 file.md     (or - for stdin; also stores the PR's diff)
     owner-dash put review 362 file.md
     owner-dash put brief settings-match file.md                  (a brief awaiting or past owner approval, by name)
+    owner-dash put report compare-rts file.md                    (an eval or comparison result the owner reads, by name; no approval)
     owner-dash put matrix file.md
     owner-dash show walkthrough 362
     owner-dash approvals                                          (each PR's and brief's latest decision, and whether it is current)

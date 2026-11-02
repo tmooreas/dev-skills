@@ -43,6 +43,12 @@ or telemetry findings are not functional gates. Missing required proof is
 NOT_REVIEWED, not an invented defect or PASS. Lesser observations are notes with
 named follow-ups, not extra scope quietly added to the PR.
 
+State each defect's reachability beside its severity: SEEN (the trigger is in real
+data or a real run), LIKELY (ordinary inputs or workflows produce it; say which), or
+CONTRIVED (only a hand-built input or developer-only step). A hand-built repro
+proves the code path, not that users hit it; a CONTRIVED defect is a note with a
+follow-up, never a blocker or "serious".
+
 Price rigor by blast radius. Runtime/customer changes get the applicable passes
 below. Docs-only changes get context and content/link verification, not a full
 adversarial pipeline audit. Keep one independent reviewer across rounds; default

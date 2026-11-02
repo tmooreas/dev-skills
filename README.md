@@ -49,9 +49,11 @@ introduced by this repository; the one service is the optional owner dashboard b
 
 ## Owner dashboard
 
-`bin/owner-dash serve` serves posted PR walkthroughs, reviews, briefs and the PR matrix at
+`bin/owner-dash serve` serves posted PR walkthroughs, reviews, briefs, reports and the PR matrix at
 `http://localhost:8765`; `bin/owner-dash put walkthrough N -`, `put review N file`,
-`put brief <name> file` and `put matrix -` post them, and `show` prints one back. A posted walkthrough stores the
+`put brief <name> file`, `put report <name> file` and `put matrix -` post them, and `show` prints one back. The
+Briefs and Walkthroughs lists mark each entry approved, approved an older version, or not approved. Reports
+(eval scorecards, comparisons) have no approval. A posted walkthrough stores the
 PR's diff (`--base <branch>` for stacked PRs), shows each hunk beside the sentence that
 names it, serves `--attach` files for download, and fails until every changed line is
 placed and every touched name is named; `check N` re-runs that at the current head.
