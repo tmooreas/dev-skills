@@ -637,9 +637,10 @@ def with_walkthroughs(base, matrix_html):
 
 
 STYLE = """<style>
-body{font:15px/1.5 system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#222}
+body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:24px 32px;padding:0;color:#222}
 a{color:#0b5cad}table{border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ccc;padding:4px 8px;vertical-align:top}
-th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overflow-x:auto}code{background:#f3f3f3;padding:0 3px}
+th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overflow-x:auto}code{background:#f3f3f3;padding:0 3px;overflow-wrap:anywhere}
+tr.wt>td{max-width:0}tr.wt table{display:block;max-width:100%;overflow-x:auto}
 nav{margin-bottom:16px}nav a{margin-right:16px;font-weight:600}.when{color:#777;font-size:13px;margin-left:8px}
 tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#0b5cad;font-size:13px}
 button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
