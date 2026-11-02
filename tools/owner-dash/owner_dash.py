@@ -596,6 +596,15 @@ def approval_html(path):
             + f"<button>{text}</button></form>")
 
 
+def badge(path):
+    d, _, approved = standing(path)
+    if approved:
+        return " <b class=ok>approved</b>"
+    if d and d["action"] == "approve":
+        return " <b class=stale>approved an older version</b>"
+    return " <b class=no>not approved</b>"
+
+
 OPEN = {}
 
 
@@ -656,6 +665,7 @@ details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;fon
 i[class^=y]{font-style:normal}[class^=yk],.yow{color:#0000ff}[class^=ys]{color:#a31515}
 [class^=yc]{color:#008000;font-style:italic}.ynf,.ync,.ynd{color:#795e26}.ynb,.ybp{color:#267f99}[class^=ym]{color:#098658}
 .ok{color:#1a7f37}.bad{color:#b42318;font-weight:600}
+li b{font-size:12px;margin-left:8px}li b.stale{color:#9a6700}li b.no{color:#777;font-weight:400}
 ::highlight(same){background:#ffe58a}
 </style>"""
 
@@ -748,7 +758,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 2 and parts[1] == "briefs":
             files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True) if folder.is_dir() else []
             body = "<h1>Briefs</h1><ul>" + "".join(
-                f'<li><a href="/{project}/briefs/{f.name}">{html.escape(f.stem)}</a>'
+                f'<li><a href="/{project}/briefs/{f.name}">{html.escape(f.stem)}</a>{badge(f)}'
                 f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
                 for f in files) + "</ul>"
             return self.send(page(project, "briefs", body))
@@ -758,7 +768,7 @@ class Handler(BaseHTTPRequestHandler):
 
             def items(chosen):
                 return "".join(
-                    f'<li><a href="/{project}/{parts[1]}/{f.name}">#{pr_number(f)}</a>'
+                    f'<li><a href="/{project}/{parts[1]}/{f.name}">#{pr_number(f)}</a>{badge(f) if parts[1] == "walkthroughs" else ""}'
                     f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
                     for f in chosen)
             done = [f for f in files if still_open is not None and str(pr_number(f)) not in still_open]
