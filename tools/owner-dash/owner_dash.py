@@ -627,7 +627,7 @@ def with_walkthroughs(base, matrix_html):
         width = row.group(0).count("<td")
         mark = " · approved" if standing(path)[2] else ""
         return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}{mark}'
-                f'</summary>{approval_html(path)}{render_walkthrough(path)}<button class=fold onclick="var d=this.closest(\'details\');'
+                f'</summary>{approval_html(path)}{render_walkthrough(path)}{approval_html(path)}<button class=fold onclick="var d=this.closest(\'details\');'
                 f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
                 f'</button></details></td></tr>')
     body = re.sub(r"<tr>\s*<td.*?</tr>", expand, matrix_html, flags=re.S)
