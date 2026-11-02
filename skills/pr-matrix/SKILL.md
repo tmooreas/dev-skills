@@ -23,7 +23,9 @@ Only PRs that are ready for an approval right now:
 - open, not draft;
 - an independent review verdict of PASS at the PR's **current** head (a PASS at
   an older head does not count; a restack or new commit needs its delta check);
-- CI green on that exact head.
+- CI green on that exact head;
+- every PR it is stacked on is itself in the matrix (owner 2026-11-02). A PR whose
+  base is still in review or rework waits in "not in the matrix" with its base.
 
 Everything else goes in a short "not in the matrix" list with the one thing it is
 waiting on (review round, fix, owner decision, hold). Check each fact live
@@ -54,10 +56,10 @@ Recompute after every merge: dependence drops for the PRs stacked on it, and
 
 ## Output
 
-One table, highest score first. Every ready PR is in it, stacked or not: no second
-"also ready" or "approved" table (owner 2026-11-02, "all ready prs should be in one
-list ordered by pr matrix criteria"). Stacking shows in "(on #N)", dependence and the
-merge order.
+One table, highest score first, except that a stacked PR never ranks above the PR it
+sits on: move it to just below its base (owner 2026-11-02). Every ready PR is in it:
+no second "also ready" or "approved" table (owner 2026-11-02, "all ready prs should be
+in one list ordered by pr matrix criteria"). Stacking shows in "(on #N)" and dependence.
 
 | # | PR | What it does (plain) | Lines | Score |
 |---|---|---|---|---|
@@ -70,8 +72,8 @@ merge order.
 
 Under the table:
 
-1. **Merge order** where it differs from the ranking: a stacked PR can rank high but
-   still merges after its base.
+1. **Merge order** for each stack, since the table already keeps a base above its
+   dependents.
 2. **Not in the matrix:** PR, what it waits on.
 3. **Known conflicts** between ranked PRs, and which one has to fix it when it
    lands second.
