@@ -57,6 +57,11 @@ names it, serves `--attach` files for download, and fails until every changed li
 placed and every touched name is named; `check N` re-runs that at the current head.
 It creates its own venv (`tools/owner-dash/requirements.txt`) on first run and stores
 posts under `~/.local/share/owner-dash/<project>/`.
+Each walkthrough and brief page has an Approve button (and Withdraw once approved). A
+click appends to `<project>/approvals.jsonl`, pinned to the walkthrough's diffed head or
+the brief's text; a new head or an edited brief shows the old approval as earlier and
+offers a fresh one. `owner-dash approvals` prints each latest decision and whether it is
+still current.
 
 ## Tracker collector and local verification
 

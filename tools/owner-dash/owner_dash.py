@@ -6,6 +6,7 @@
     owner-dash put brief settings-match file.md                  (a brief awaiting or past owner approval, by name)
     owner-dash put matrix file.md
     owner-dash show walkthrough 362
+    owner-dash approvals                                          (each PR's and brief's latest decision, and whether it is current)
     owner-dash serve [--port 8765]
 
 Every command takes --project NAME (default: the current git repo's name).
@@ -14,6 +15,7 @@ Run through bin/owner-dash, which provides its venv.
 """
 import argparse
 import ast
+import hashlib
 import difflib
 import html
 import json
@@ -22,7 +24,7 @@ import mimetypes
 import shutil
 import subprocess
 import sys
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -465,6 +467,56 @@ def link_files(path, body):
     return body
 
 
+def version(path):
+    """What an approval is pinned to: the head a walkthrough's diff was stored at, or a brief's text (less the
+    posting stamp and the **Status:** line, which change when it is approved)."""
+    if path.parent.name == "briefs":
+        body = re.sub(r"\A\*Posted [^*\n]*\*\s*", "", path.read_text(encoding="utf-8"))
+        body = re.sub(r"(?m)^\*\*Status:.*\n?", "", body)
+        return hashlib.sha256(body.encode()).hexdigest()[:12]
+    diff = path.with_suffix(".diff")
+    return diff.read_text(encoding="utf-8").split()[2] if diff.is_file() else None
+
+
+def item(path):
+    return ("brief", path.stem) if path.parent.name == "briefs" else ("pr", str(pr_number(path)))
+
+
+def decisions(base):
+    """{(kind, name): latest decision}, from the project's append-only approvals.jsonl."""
+    log = base / "approvals.jsonl"
+    found = {}
+    for line in log.read_text(encoding="utf-8").splitlines() if log.is_file() else []:
+        d = json.loads(line)
+        found[(d["kind"], d["name"])] = d
+    return found
+
+
+def standing(path):
+    """(latest decision or None, current version, whether an approval stands for the current version)."""
+    d, now = decisions(path.parent.parent).get(item(path)), version(path)
+    return d, now, bool(d and now and d["action"] == "approve" and d["version"] == now)
+
+
+def approval_html(path):
+    kind, name = item(path)
+    d, now, approved = standing(path)
+    if now is None:
+        return "<p class=when>No diff stored for this walkthrough, so it cannot be approved yet.</p>"
+    label = f"#{name}" if kind == "pr" else name
+    if approved:
+        state = f'<span class=ok>Approved {html.escape(d["at"])} at {now[:8]}.</span>'
+        action, text = "withdraw", "Withdraw approval"
+    else:
+        state = (f'<span class=bad>You approved an earlier version ({html.escape(d["version"][:8])}); this is '
+                 f'{now[:8]}.</span>' if d and d["action"] == "approve" else "<span>Not approved.</span>")
+        action, text = "approve", f"Approve {label} at {now[:8]}"
+    fields = (("kind", kind), ("name", name), ("version", now), ("action", action))
+    return (f'<form class=ap method=post action="/{quote(path.parent.parent.name)}/approve">{state} '
+            + "".join(f'<input type=hidden name={k} value="{html.escape(v)}">' for k, v in fields)
+            + f"<button>{text}</button></form>")
+
+
 OPEN = {}
 
 
@@ -494,8 +546,9 @@ def with_walkthroughs(base, matrix_html):
         if not path or not path.is_file():
             return row.group(0)
         width = row.group(0).count("<td")
-        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}'
-                f'</summary>{render_walkthrough(path)}<button class=fold onclick="var d=this.closest(\'details\');'
+        mark = " · approved" if standing(path)[2] else ""
+        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}{mark}'
+                f'</summary>{approval_html(path)}{render_walkthrough(path)}<button class=fold onclick="var d=this.closest(\'details\');'
                 f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
                 f'</button></details></td></tr>')
     body = re.sub(r"<tr>\s*<td.*?</tr>", expand, matrix_html, flags=re.S)
@@ -511,6 +564,8 @@ th{background:#f3f3f3;text-align:left}pre{background:#f6f6f6;padding:10px;overfl
 nav{margin-bottom:16px}nav a{margin-right:16px;font-weight:600}.when{color:#777;font-size:13px;margin-left:8px}
 tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#0b5cad;font-size:13px}
 button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
+form.ap{margin:8px 0 14px;padding:8px 10px;border:1px solid #ccc;background:#fafafa}
+form.ap button{margin-left:10px;padding:4px 12px;cursor:pointer}
 #foldfix{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
@@ -637,7 +692,33 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) != 3 or not path.is_file():
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
         body = render_walkthrough(path) if parts[1] == "walkthroughs" else render(path.read_text(encoding="utf-8"))
+        if parts[1] in ("walkthroughs", "briefs"):
+            body = approval_html(path) + body
         self.send(page(project, path.stem, body))
+
+    def do_POST(self):
+        """An approve or withdraw click. Refused unless it comes from this dashboard's own page (same origin) and
+        names the version that page showed, so a stale tab cannot approve a newer head or brief."""
+        parts = [unquote(p) for p in self.path.split("?")[0].split("/") if p]
+        host = f"http://{self.headers.get('Host', '')}"
+        if len(parts) != 2 or parts[1] != "approve" or parts[0] in (".", "..") or "/" in parts[0] \
+                or self.headers.get("Origin") != host or not (ROOT / parts[0]).is_dir():
+            return self.send(page(None, "Refused", "<p>Refused.</p>"), 403)
+        form = parse_qs(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
+        kind, name, seen, action = (form.get(k, [""])[0] for k in ("kind", "name", "version", "action"))
+        valid = (kind == "pr" and name.isdigit()) or (kind == "brief" and BRIEF_NAME.fullmatch(name))
+        path = valid and target(parts[0], "walkthrough" if kind == "pr" else "brief", name)
+        if not path or action not in ("approve", "withdraw") or not path.is_file() or version(path) != seen:
+            return self.send(page(parts[0], "Out of date", "<p>This page is out of date. Reload it and look again."
+                                                           "</p>"), 409)
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        with (ROOT / parts[0] / "approvals.jsonl").open("a", encoding="utf-8") as log:
+            log.write(json.dumps({"kind": kind, "name": name, "version": seen, "action": action, "at": stamp}) + "\n")
+        back = self.headers.get("Referer", "")
+        self.send_response(303)
+        self.send_header("Location", back[len(host):] if back.startswith(host + "/") else f"/{quote(parts[0])}/")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def send(self, body, status=200):
         data = body.encode()
@@ -668,6 +749,15 @@ def serve(args):
     ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
 
 
+def list_approvals(args):
+    base = ROOT / args.project
+    for (kind, name), d in sorted(decisions(base).items()):
+        path = target(args.project, "walkthrough" if kind == "pr" else "brief", name)
+        now = version(path) if path.is_file() else None
+        state = "current" if now == d["version"] else f"STALE: posted is now {now}"
+        print(f"{kind} {name} {d['action']} {d['version']} {d['at']} ({state})")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="owner-dash")
     parser.add_argument("--project", default=None)
@@ -684,10 +774,13 @@ def main():
     p_put.add_argument("--attach", action="append", default=[], help="file shown with a walkthrough (repeatable)")
     p_show.set_defaults(attach=[])
     sub.add_parser("check", help="refetch a posted walkthrough's diff and run its checks").add_argument("n")
+    sub.add_parser("approvals", help="each PR's and brief's latest decision, and whether it matches what is posted")
     args = parser.parse_args()
     args.project = args.project or default_project()
     if args.command == "serve":
         return serve(args)
+    if args.command == "approvals":
+        return list_approvals(args)
     if args.command == "check":
         args.number = args.n
         path = target(args.project, "walkthrough", args.n)
