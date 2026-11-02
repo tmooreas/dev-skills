@@ -39,7 +39,7 @@ from pygments.token import STANDARD_TYPES
 
 ROOT = Path(environ.get("OWNER_DASH_DIR", Path.home() / ".local/share/owner-dash"))
 MARKDOWN = MarkdownIt("commonmark", {"linkify": False}).enable("table")
-KINDS = ("walkthrough", "review", "brief")
+KINDS = ("walkthrough", "review", "brief", "report")
 BRIEF_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
@@ -52,10 +52,10 @@ def target(project, kind, number=None):
     base = ROOT / project
     if kind == "matrix":
         return base / "matrix.md"
-    if kind == "brief":
+    if kind in ("brief", "report"):
         if not BRIEF_NAME.fullmatch(number):
-            sys.exit(f"owner-dash: a brief's name is lowercase letters, digits and dashes, not {number!r}")
-        return base / "briefs" / f"{number}.md"
+            sys.exit(f"owner-dash: a {kind}'s name is lowercase letters, digits and dashes, not {number!r}")
+        return base / f"{kind}s" / f"{number}.md"
     return base / f"{kind}s" / f"pr{number}.md"
 
 
@@ -728,7 +728,8 @@ document.addEventListener("selectionchange", () => {
 def page(project, title, body):
     nav = "".join(f'<a href="/{p.name}/">{html.escape(p.name)}</a>' for p in sorted(ROOT.glob("*/")) if p.is_dir())
     sub = "" if not project else (f'<nav><a href="/{project}/">Matrix</a><a href="/{project}/walkthroughs/">Walkthroughs</a>'
-                                  f'<a href="/{project}/reviews/">Reviews</a><a href="/{project}/briefs/">Briefs</a></nav>')
+                                  f'<a href="/{project}/reviews/">Reviews</a><a href="/{project}/briefs/">Briefs</a>'
+                                  f'<a href="/{project}/reports/">Reports</a></nav>')
     return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
             f"{SCRIPT}")
 
@@ -755,13 +756,13 @@ class Handler(BaseHTTPRequestHandler):
         folder = base / parts[1]
         if parts[1] not in (f"{k}s" for k in KINDS):
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
-        if len(parts) == 2 and parts[1] == "briefs":
+        if len(parts) == 2 and parts[1] in ("briefs", "reports"):
             files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True) if folder.is_dir() else []
-            body = "<h1>Briefs</h1><ul>" + "".join(
-                f'<li><a href="/{project}/briefs/{f.name}">{html.escape(f.stem)}</a>{badge(f)}'
+            body = f"<h1>{parts[1].title()}</h1><ul>" + "".join(
+                f'<li><a href="/{project}/{parts[1]}/{f.name}">{html.escape(f.stem)}</a>{badge(f) if parts[1] == "briefs" else ""}'
                 f'<span class=when>{time.strftime("%m-%d %H:%M", time.localtime(f.stat().st_mtime))}</span></li>'
                 for f in files) + "</ul>"
-            return self.send(page(project, "briefs", body))
+            return self.send(page(project, parts[1], body))
         if len(parts) == 2:
             files = sorted(folder.glob("pr*.md"), key=pr_number, reverse=True) if folder.is_dir() else []
             still_open = open_prs(base)
