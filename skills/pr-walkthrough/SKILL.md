@@ -232,6 +232,11 @@ Check each item against the diff.
 ## Rules
 
 - Plain language; the owner should not need to decode.
+- No purple prose (owner 2026-11-02, on #372). Short declarative sentences, one fact
+  each. Drop scene-setting, rhetorical framing ("the problem in miniature", "rest on"),
+  stacked qualifiers, and sentences that chain three clauses with colons or semicolons.
+  Numbers, names and code spans stay; the adjectives around them go. A history line says
+  what changed, not the story of how it was found.
 - Every claim about code has a `file:line`; every claim about behaviour has an observed
   output or is marked `[INFERENCE]`.
 - A PASS from the reviewer is evidence, not the walkthrough: re-check the antipatterns
