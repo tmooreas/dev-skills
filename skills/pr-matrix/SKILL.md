@@ -54,7 +54,10 @@ Recompute after every merge: dependence drops for the PRs stacked on it, and
 
 ## Output
 
-One table, highest score first:
+One table, highest score first. Every ready PR is in it, stacked or not: no second
+"also ready" or "approved" table (owner 2026-11-02, "all ready prs should be in one
+list ordered by pr matrix criteria"). Stacking shows in "(on #N)", dependence and the
+merge order.
 
 | # | PR | What it does (plain) | Lines | Score |
 |---|---|---|---|---|
