@@ -61,7 +61,8 @@ Each walkthrough and brief page has an Approve button (and Withdraw once approve
 click appends to `<project>/approvals.jsonl`, pinned to the walkthrough's diffed head or
 the brief's text; a new head or an edited brief shows the old approval as earlier and
 offers a fresh one. `owner-dash approvals` prints each latest decision and whether it is
-still current.
+still current; `owner-dash record approve pr|brief <N|name>` records one given in chat, so
+the page shows it.
 
 ## Tracker collector and local verification
 

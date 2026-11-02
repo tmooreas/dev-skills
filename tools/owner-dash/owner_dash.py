@@ -711,9 +711,7 @@ class Handler(BaseHTTPRequestHandler):
         if not path or action not in ("approve", "withdraw") or not path.is_file() or version(path) != seen:
             return self.send(page(parts[0], "Out of date", "<p>This page is out of date. Reload it and look again."
                                                            "</p>"), 409)
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        with (ROOT / parts[0] / "approvals.jsonl").open("a", encoding="utf-8") as log:
-            log.write(json.dumps({"kind": kind, "name": name, "version": seen, "action": action, "at": stamp}) + "\n")
+        record(parts[0], kind, name, seen, action, "dashboard")
         back = self.headers.get("Referer", "")
         self.send_response(303)
         self.send_header("Location", back[len(host):] if back.startswith(host + "/") else f"/{quote(parts[0])}/")
@@ -749,6 +747,23 @@ def serve(args):
     ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
 
 
+def record(project, kind, name, seen, action, via):
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    with (ROOT / project / "approvals.jsonl").open("a", encoding="utf-8") as log:
+        log.write(json.dumps({"kind": kind, "name": name, "version": seen, "action": action, "at": stamp,
+                              "via": via}) + "\n")
+
+
+def record_chat(args):
+    """An approval the owner gave in chat, pinned to what is posted now so the page shows it."""
+    path = target(args.project, "walkthrough" if args.kind == "pr" else "brief", args.name)
+    now = version(path) if path.is_file() else None
+    if now is None:
+        sys.exit(f"owner-dash: nothing approvable posted at {path}")
+    record(args.project, args.kind, args.name, now, args.action, "chat")
+    print(f"{args.kind} {args.name} {args.action} at {now} (chat)")
+
+
 def list_approvals(args):
     base = ROOT / args.project
     for (kind, name), d in sorted(decisions(base).items()):
@@ -775,12 +790,18 @@ def main():
     p_show.set_defaults(attach=[])
     sub.add_parser("check", help="refetch a posted walkthrough's diff and run its checks").add_argument("n")
     sub.add_parser("approvals", help="each PR's and brief's latest decision, and whether it matches what is posted")
+    p_rec = sub.add_parser("record", help="record an approval or withdrawal the owner gave in chat")
+    p_rec.add_argument("action", choices=("approve", "withdraw"))
+    p_rec.add_argument("kind", choices=("pr", "brief"))
+    p_rec.add_argument("name")
     args = parser.parse_args()
     args.project = args.project or default_project()
     if args.command == "serve":
         return serve(args)
     if args.command == "approvals":
         return list_approvals(args)
+    if args.command == "record":
+        return record_chat(args)
     if args.command == "check":
         args.number = args.n
         path = target(args.project, "walkthrough", args.n)
