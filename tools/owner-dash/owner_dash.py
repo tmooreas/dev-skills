@@ -510,7 +510,22 @@ def attachments(path):
     return sorted(folder.iterdir()) if folder.is_dir() else []
 
 
+RENDERED = {}
+
+
 def render_walkthrough(path):
+    """(html, digest). Rendering a big diff takes seconds; it is redone only when the walkthrough, its diff or its
+    files change."""
+    key = [(p.name, p.stat().st_mtime_ns) for p in (path, path.with_suffix(".diff"), path.with_suffix(".names.json"),
+                                                     path.with_suffix(".files")) if p.exists()]
+    hit = RENDERED.get(path)
+    if not hit or hit[0] != key:
+        body = walkthrough_html(path)
+        hit = RENDERED[path] = (key, body, hashlib.sha256(body.encode()).hexdigest()[:12])
+    return hit[1:]
+
+
+def walkthrough_html(path):
     files_html = "".join(f'<li><a href="{file_url(a)}">{html.escape(a.name)}</a></li>' for a in attachments(path))
     files_html = f"<p><strong>Files:</strong></p><ul>{files_html}</ul>" if files_html else ""
     if not path.with_suffix(".diff").is_file():
@@ -640,7 +655,8 @@ def open_prs(base):
     return numbers
 
 
-def with_walkthroughs(base, matrix_html):
+def with_walkthroughs(base, matrix_html, have=()):
+    """`have`: ids of walkthrough bodies the page already shows; they are sent empty, and htmx keeps the page's own."""
     still_open, gone = open_prs(base), []
 
     def expand(row):
@@ -648,18 +664,44 @@ def with_walkthroughs(base, matrix_html):
         if found and still_open is not None and found.group(1) not in still_open:
             gone.append(f"#{found.group(1)}")
             return ""
-        path = found and base / "walkthroughs" / f"pr{found.group(1)}.md"
-        if not path or not path.is_file():
+        if not found:
             return row.group(0)
+        n, path = found.group(1), base / "walkthroughs" / f"pr{found.group(1)}.md"
+        if not path.is_file():
+            return f'<tr data-pr={n} data-head="">{row.group(0)[4:]}'
+        _, now, approved = standing(path)
         width = row.group(0).count("<td")
-        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}'
-                f'{approved_mark(path)}</summary>{approval_html(path)}{render_walkthrough(path)}{approval_html(path)}<button class=fold onclick="var d=this.closest(\'details\');'
-                f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
+        approvable = f' data-approvable="{now}"' if now and not approved else ""
+        body, digest = render_walkthrough(path)
+        kept = f"wb{n}-{digest}"
+        return (f'<tr data-pr={n} data-head="{now or ""}">{row.group(0)[4:]}<tr class=wt data-wt={n}{approvable}>'
+                f'<td colspan={width}><details><summary>Walkthrough #{n}'
+                f'{approved_mark(path)}</summary>{approval_html(path)}<div id={kept} hx-preserve>'
+                f'{"" if kept in have else body}</div>{approval_html(path)}<button class=fold onclick="var d=this.closest(\'details\');'
+                f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{n}'
                 f'</button></details></td></tr>')
     body = re.sub(r"<tr>\s*<td.*?</tr>", expand, matrix_html, flags=re.S)
     note = ("<p class=when>Could not ask GitHub which PRs are open; showing every row.</p>" if still_open is None
             else f"<p class=when>Hidden, merged or closed: {', '.join(gone)}</p>" if gone else "")
     return note + body
+
+
+def stamp(base):
+    """Changes whenever the matrix page would: cheap enough to ask every few seconds."""
+    files = [base / "matrix.md", base / "approvals.jsonl", *sorted((base / "walkthroughs").glob("pr*"))]
+    still_open = open_prs(base)
+    seen = [(f.name, s.st_mtime_ns, s.st_size) for f in files if f.exists() for s in [f.stat()]]
+    return hashlib.sha256(repr((seen, still_open and sorted(still_open))).encode()).hexdigest()[:12]
+
+
+def live(project, base, have=()):
+    """The matrix body, polled every 10s while the tab is visible; the server answers 204 until `stamp` moves."""
+    now, matrix = stamp(base), base / "matrix.md"
+    body = with_walkthroughs(base, render(matrix.read_text(encoding="utf-8")), have) if matrix.is_file() \
+        else "<p>No matrix posted.</p>"
+    shown = "[document.visibilityState=='visible']"
+    return (f'<div id=live hx-get="/{quote(project)}/live?since={now}" hx-swap=outerHTML '
+            f'hx-trigger="every 10s {shown}, visibilitychange{shown} from:document">{body}</div>')
 
 
 STYLE = """<style>
@@ -685,24 +727,31 @@ i[class^=y]{font-style:normal}[class^=yk],.yow{color:#0000ff}[class^=ys]{color:#
 .ok{color:#1a7f37}.bad{color:#b42318;font-weight:600}
 li b{font-size:12px;margin-left:8px}li b.stale{color:#9a6700}li b.no{color:#777;font-weight:400}
 ::highlight(same){background:#ffe58a}
+tr[data-pr]>td,tr.wt summary{transition:background 1s}tr.fresh>td,summary.fresh{background:#fff1b8}
+.tag{margin-left:8px;padding:0 6px;border-radius:8px;background:#d97706;color:#fff;font-size:11px;font-weight:600}
 </style>"""
 
 SCRIPT = """<button id=foldfix></button><script>
 // Open sections are remembered per page: each <details> is keyed by its summaries' text, outermost first,
 // plus how many earlier sections share that text.
 const store = "open:" + location.pathname;
-const keyed = new Map(), seen = {};
+let keyed = new Map();
 const label = d => [...(d.querySelector(":scope>summary")?.childNodes || [])]
-  .filter(n => !n.classList?.contains("mk")).map(n => n.textContent).join("");
-for (const d of document.querySelectorAll("details")) {
-  const names = [];
-  for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(label(e));
-  const name = names.join(" / ");
-  seen[name] = (seen[name] || 0) + 1;
-  keyed.set(d, `${name} #${seen[name]}`);
+  .filter(n => !n.classList?.contains("mk") && !n.classList?.contains("tag")).map(n => n.textContent).join("");
+function reopen() {
+  const seen = {};
+  keyed = new Map();
+  for (const d of document.querySelectorAll("details")) {
+    const names = [];
+    for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(label(e));
+    const name = names.join(" / ");
+    seen[name] = (seen[name] || 0) + 1;
+    keyed.set(d, `${name} #${seen[name]}`);
+  }
+  const remembered = new Set(JSON.parse(localStorage.getItem(store) || "[]"));
+  for (const [d, key] of keyed) if (remembered.has(key)) d.open = true;
 }
-const remembered = new Set(JSON.parse(localStorage.getItem(store) || "[]"));
-for (const [d, key] of keyed) if (remembered.has(key)) d.open = true;
+reopen();
 document.addEventListener("toggle", () => {
   localStorage.setItem(store, JSON.stringify([...keyed].filter(([d]) => d.open).map(([, key]) => key)));
   placeFold();
@@ -743,10 +792,64 @@ document.addEventListener("selectionchange", () => {
   CSS.highlights.set("same", new Highlight(...ranges));
 });
 
+// Matrix rows not seen in this browser before, or seen at another head, and walkthroughs newly ready to approve
+// stay marked until looked at: hovered, clicked, or half on screen for 4 seconds.
+const freshStore = "seen:" + location.pathname, keyOf = new Map(), watched = new Map();
+const arm = x => watched.set(x, document.hidden ? 0 : setTimeout(() => looked(x), 4000));
+const watcher = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    clearTimeout(watched.get(e.target));
+    watched.delete(e.target);
+    if (e.isIntersecting) arm(e.target);
+  }
+}, {threshold: 0.5});
+document.addEventListener("visibilitychange", () => {
+  for (const x of watched.keys()) clearTimeout(watched.get(x)), arm(x);
+});
+function looked(x) {
+  if (!keyOf.has(x)) return;
+  const known = new Set(JSON.parse(localStorage.getItem(freshStore) || "[]"));
+  localStorage.setItem(freshStore, JSON.stringify([...known.add(keyOf.get(x))]));
+  keyOf.delete(x);
+  watcher.unobserve(x);
+  clearTimeout(watched.get(x));
+  watched.delete(x);
+  x.classList.remove("fresh");
+  x.querySelector(".tag")?.remove();
+}
+function fresh() {
+  watcher.disconnect();
+  for (const t of watched.values()) clearTimeout(t);
+  watched.clear();
+  keyOf.clear();
+  const items = [...document.querySelectorAll("#live tr[data-pr]")].map(r => [r, r.dataset.pr, `pr${r.dataset.pr}@${r.dataset.head}`])
+    .concat([...document.querySelectorAll("#live tr[data-approvable]")]
+      .map(r => [r.querySelector("summary"), r.dataset.wt, `ready${r.dataset.wt}@${r.dataset.approvable}`]));
+  const stored = localStorage.getItem(freshStore), shown = new Set(items.map(i => i[1]));
+  const known = JSON.parse(stored || "[]").filter(k => shown.has(k.match(/[0-9]+/)[0]));
+  if (stored === null) known.push(...items.map(i => i[2]));
+  localStorage.setItem(freshStore, JSON.stringify(known));
+  for (const [x, pr, key] of items) {
+    if (known.includes(key)) continue;
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = key.startsWith("ready") ? "ready to approve" : known.some(k => k.startsWith(`pr${pr}@`)) ? "updated" : "new";
+    (x.matches("summary") ? x : [...x.cells].find(c => c.textContent.includes("#" + pr)) || x.cells[0]).append(tag);
+    x.classList.add("fresh");
+    keyOf.set(x, key);
+    watcher.observe(x);
+    x.addEventListener("pointerenter", () => looked(x), {once: true});
+    x.addEventListener("click", () => looked(x), {once: true});
+  }
+}
+if (document.getElementById("live")) fresh();
+
 const before = new WeakMap();
 document.addEventListener("htmx:beforeRequest", e => {
   const form = e.detail.elt;
   if (!form.matches("form.ap")) return;
+  saving++;
+  clicks++;
   const approve = form.elements.action.value === "approve";
   const spots = [...document.querySelectorAll(`[data-item="${form.dataset.item}"]`)];
   before.set(form, spots.map(s => [s, s.innerHTML]));
@@ -770,15 +873,49 @@ document.addEventListener("htmx:beforeSwap", e => {
   e.detail.serverResponse = t.innerHTML;
 });
 document.addEventListener("htmx:afterRequest", e => {
-  const form = e.detail.elt, saved = before.get(form);
+  const form = e.detail.requestConfig.elt, saved = before.get(form);
   if (!saved) return;
   before.delete(form);
+  saving--;
   if (e.detail.successful) return;
   for (const [s, was] of saved) s.innerHTML = was;
   const msg = document.createElement("span"), xhr = e.detail.xhr;
   msg.className = "bad msg";
   msg.textContent = xhr.status ? xhr.responseText : "Could not reach the dashboard. Reload the page to see what was recorded.";
   form.append(msg);
+});
+
+// The matrix redraws itself when the server has a new one (it answers 204 until then): open sections come back
+// from their memory and the row at the top of the screen stays put. A redraw is dropped while an approval is being
+// saved or if one was clicked since it was asked for; the next poll fetches it again.
+let saving = 0, clicks = 0, asked = 0, anchors = null;
+const twin = x => x.dataset.pr || x.dataset.wt
+  ? () => document.querySelector(`#live tr[data-${x.dataset.pr ? "pr" : "wt"}="${x.dataset.pr || x.dataset.wt}"]`)
+  : (text => () => [...document.querySelectorAll(`#live > ${x.tagName}`)].find(y => y.textContent === text))(x.textContent);
+document.addEventListener("htmx:beforeRequest", e => {
+  if (e.detail.elt.id === "live") asked = clicks;
+});
+document.addEventListener("htmx:configRequest", e => {
+  if (e.detail.elt.id === "live")
+    e.detail.parameters.have = [...document.querySelectorAll("#live [hx-preserve]")].map(x => x.id).join(" ");
+});
+document.addEventListener("htmx:beforeSwap", e => {
+  if (e.detail.elt.id !== "live" || !e.detail.shouldSwap) return;
+  if (saving || asked !== clicks) return e.detail.shouldSwap = false;
+  const rows = [...document.querySelectorAll("#live tr[data-pr], #live tr[data-wt], #live > *")]
+    .sort((a, b) => !!b.closest("tr") - !!a.closest("tr"));
+  anchors = !scrollY ? [] : rows.map(x => [x, x.getBoundingClientRect()]).filter(([, r]) => r.bottom > 0 && r.top < innerHeight)
+    .map(([x, r]) => [twin(x), r.top]);
+});
+document.addEventListener("htmx:afterSwap", () => {
+  if (!anchors) return;
+  const kept = anchors;
+  anchors = null;
+  reopen();
+  fresh();
+  const [find, top] = kept.find(([find]) => find()) || [];
+  if (find) scrollBy(0, find().getBoundingClientRect().top - top);
+  placeFold();
 });
 </script>"""
 
@@ -809,10 +946,13 @@ class Handler(BaseHTTPRequestHandler):
         if not base.is_dir():
             return self.send(page(None, "Not found", "<p>No such project.</p>"), 404)
         if len(parts) == 1:
-            matrix = base / "matrix.md"
-            body = with_walkthroughs(base, render(matrix.read_text(encoding="utf-8"))) if matrix.is_file() \
-                else "<p>No matrix posted.</p>"
-            return self.send(page(project, f"{project} matrix", body))
+            return self.send(page(project, f"{project} matrix", live(project, base)))
+        if parts[1] == "live":
+            query = parse_qs(self.path.partition("?")[2])
+            if query.get("since") == [stamp(base)]:
+                self.send_response(204)
+                return self.end_headers()
+            return self.send(live(project, base, set(query.get("have", [""])[0].split())))
         folder = base / parts[1]
         if parts[1] not in (f"{k}s" for k in KINDS):
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
@@ -842,7 +982,7 @@ class Handler(BaseHTTPRequestHandler):
         path = folder / parts[2]
         if len(parts) != 3 or not path.is_file():
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
-        body = render_walkthrough(path) if parts[1] == "walkthroughs" else render(path.read_text(encoding="utf-8"))
+        body = render_walkthrough(path)[0] if parts[1] == "walkthroughs" else render(path.read_text(encoding="utf-8"))
         if parts[1] in ("walkthroughs", "briefs"):
             body = approval_html(path) + body
         self.send(page(project, path.stem, body))

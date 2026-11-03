@@ -68,6 +68,11 @@ and puts the old one back with the server's reason if the click is refused. With
 form posts and reloads. `owner-dash approvals` prints each latest decision and whether it is
 still current; `owner-dash record approve pr|brief <N|name>` records one given in chat, so
 the page shows it.
+The matrix page asks the server every 10 s, only while the tab is visible, whether the matrix, a
+walkthrough, an approval or the set of open PRs changed (a 204 when nothing did), and redraws in place,
+keeping open sections and the scroll; it waits while an approval is being saved. Rows new to this browser
+or at a new head, and walkthroughs newly ready to approve, are marked until hovered, clicked or on screen
+for 4 s; what was seen is kept in the browser's localStorage per PR and head.
 
 ## Tracker collector and local verification
 
