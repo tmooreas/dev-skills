@@ -64,7 +64,11 @@ brief for owner approval.
 
 ## Output
 
-Keep each section short; the owner can ask for more.
+Keep each section short; the owner can ask for more. Length scales with the diff
+(owner 2026-11-03, on #384's 2,800 words for 17 lines: "waste of tokens"). Budget: a
+docs-only or ≤50-line PR gets ≤400 words in total, one to three lines per section; up
+to ~200 lines, ≤1,200 words; beyond that, as the depth rules below require. Every
+section still appears, and the coverage check still passes.
 
 1. **In one sentence:** what changes for the person running the pipeline or reading its
    output. No function names.
