@@ -62,7 +62,10 @@ posts under `~/.local/share/owner-dash/<project>/`.
 Each walkthrough and brief page has an Approve button (and Withdraw once approved). A
 click appends to `<project>/approvals.jsonl`, pinned to the walkthrough's diffed head or
 the brief's text; a new head or an edited brief shows the old approval as earlier and
-offers a fresh one. `owner-dash approvals` prints each latest decision and whether it is
+offers a fresh one. The click updates the page in place through the vendored
+`tools/owner-dash/static/htmx.min.js` (htmx 2.0.11, served locally): it shows the new state at once,
+and puts the old one back with the server's reason if the click is refused. Without JavaScript the
+form posts and reloads. `owner-dash approvals` prints each latest decision and whether it is
 still current; `owner-dash record approve pr|brief <N|name>` records one given in chat, so
 the page shows it.
 

@@ -39,6 +39,7 @@ from pygments.lexers import PythonLexer
 from pygments.token import STANDARD_TYPES
 
 ROOT = Path(environ.get("OWNER_DASH_DIR", Path.home() / ".local/share/owner-dash"))
+HTMX = Path(__file__).parent / "static" / "htmx.min.js"
 MARKDOWN = MarkdownIt("commonmark", {"linkify": False}).enable("table")
 KINDS = ("walkthrough", "review", "brief", "report")
 BRIEF_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
@@ -578,6 +579,10 @@ def standing(path):
     return d, now, bool(d and now and d["action"] == "approve" and d["version"] == now)
 
 
+def spot(path):
+    return "-".join(item(path))
+
+
 def approval_html(path):
     kind, name = item(path)
     d, now, approved = standing(path)
@@ -592,7 +597,8 @@ def approval_html(path):
                  f'{now[:8]}.</span>' if d and d["action"] == "approve" else "<span>Not approved.</span>")
         action, text = "approve", f"Approve {label} at {now[:8]}"
     fields = (("kind", kind), ("name", name), ("version", now), ("action", action))
-    return (f'<form class=ap method=post action="/{quote(path.parent.parent.name)}/approve">{state} '
+    return (f'<form class=ap data-item={spot(path)} method=post action="/{quote(path.parent.parent.name)}/approve" '
+            f'hx-post="/{quote(path.parent.parent.name)}/approve" hx-swap=none>{state} '
             + "".join(f'<input type=hidden name={k} value="{html.escape(v)}">' for k, v in fields)
             + f"<button>{text}</button></form>")
 
@@ -600,10 +606,21 @@ def approval_html(path):
 def badge(path):
     d, _, approved = standing(path)
     if approved:
-        return " <b class=ok>approved</b>"
+        return f" <b class=ok data-item={spot(path)}>approved</b>"
     if d and d["action"] == "approve":
-        return " <b class=stale>approved an older version</b>"
-    return " <b class=no>not approved</b>"
+        return f" <b class=stale data-item={spot(path)}>approved an older version</b>"
+    return f" <b class=no data-item={spot(path)}>not approved</b>"
+
+
+def approved_mark(path):
+    return f'<span class=mk data-item={spot(path)}>{" · approved" if standing(path)[2] else ""}</span>'
+
+
+def standing_update(path):
+    key = spot(path)
+    return "".join(re.sub(r"^\s*<(\w+)", rf'<\1 hx-swap-oob="outerHTML:{sel}[data-item={key}]"', part, count=1)
+                   for sel, part in (("form.ap", approval_html(path)), (".mk", approved_mark(path)),
+                                     ("b", badge(path))))
 
 
 OPEN = {}
@@ -635,9 +652,8 @@ def with_walkthroughs(base, matrix_html):
         if not path or not path.is_file():
             return row.group(0)
         width = row.group(0).count("<td")
-        mark = " · approved" if standing(path)[2] else ""
-        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}{mark}'
-                f'</summary>{approval_html(path)}{render_walkthrough(path)}{approval_html(path)}<button class=fold onclick="var d=this.closest(\'details\');'
+        return (f'{row.group(0)}<tr class=wt><td colspan={width}><details><summary>Walkthrough #{found.group(1)}'
+                f'{approved_mark(path)}</summary>{approval_html(path)}{render_walkthrough(path)}{approval_html(path)}<button class=fold onclick="var d=this.closest(\'details\');'
                 f'd.open=false;d.scrollIntoView({{block:\'nearest\'}})">Collapse walkthrough #{found.group(1)}'
                 f'</button></details></td></tr>')
     body = re.sub(r"<tr>\s*<td.*?</tr>", expand, matrix_html, flags=re.S)
@@ -656,6 +672,7 @@ tr.wt>td{border-top:none;background:#fcfcfc}tr.wt summary{cursor:pointer;color:#
 button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
 form.ap{margin:8px 0 14px;padding:8px 10px;border:1px solid #ccc;background:#fafafa}
 form.ap button{margin-left:10px;padding:4px 12px;cursor:pointer}
+form.ap .msg{margin-left:10px}
 #foldfix{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
@@ -675,9 +692,11 @@ SCRIPT = """<button id=foldfix></button><script>
 // plus how many earlier sections share that text.
 const store = "open:" + location.pathname;
 const keyed = new Map(), seen = {};
+const label = d => [...(d.querySelector(":scope>summary")?.childNodes || [])]
+  .filter(n => !n.classList?.contains("mk")).map(n => n.textContent).join("");
 for (const d of document.querySelectorAll("details")) {
   const names = [];
-  for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(e.querySelector(":scope>summary")?.textContent);
+  for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(label(e));
   const name = names.join(" / ");
   seen[name] = (seen[name] || 0) + 1;
   keyed.set(d, `${name} #${seen[name]}`);
@@ -723,6 +742,44 @@ document.addEventListener("selectionchange", () => {
   }
   CSS.highlights.set("same", new Highlight(...ranges));
 });
+
+const before = new WeakMap();
+document.addEventListener("htmx:beforeRequest", e => {
+  const form = e.detail.elt;
+  if (!form.matches("form.ap")) return;
+  const approve = form.elements.action.value === "approve";
+  const spots = [...document.querySelectorAll(`[data-item="${form.dataset.item}"]`)];
+  before.set(form, spots.map(s => [s, s.innerHTML]));
+  for (const s of spots) {
+    if (s.matches(".mk")) s.textContent = approve ? " · approved" : "";
+    if (!s.matches("form.ap")) continue;
+    s.querySelector(".msg")?.remove();
+    const state = s.querySelector("span"), button = s.querySelector("button");
+    state.className = approve ? "ok" : "";
+    state.textContent = approve ? "Approved (saving…)." : "Not approved (saving…).";
+    button.textContent = approve ? "Withdraw approval" : "Approve";
+    button.disabled = true;
+  }
+});
+document.addEventListener("htmx:beforeSwap", e => {
+  if (!e.detail.elt.matches("form.ap") || !e.detail.shouldSwap) return;
+  const t = document.createElement("template");
+  t.innerHTML = e.detail.serverResponse;
+  for (const x of t.content.querySelectorAll("[hx-swap-oob]"))
+    if (!document.querySelector(x.getAttribute("hx-swap-oob").split(":")[1])) x.remove();
+  e.detail.serverResponse = t.innerHTML;
+});
+document.addEventListener("htmx:afterRequest", e => {
+  const form = e.detail.elt, saved = before.get(form);
+  if (!saved) return;
+  before.delete(form);
+  if (e.detail.successful) return;
+  for (const [s, was] of saved) s.innerHTML = was;
+  const msg = document.createElement("span"), xhr = e.detail.xhr;
+  msg.className = "bad msg";
+  msg.textContent = xhr.status ? xhr.responseText : "Could not reach the dashboard. Reload the page to see what was recorded.";
+  form.append(msg);
+});
 </script>"""
 
 
@@ -731,8 +788,8 @@ def page(project, title, body):
     sub = "" if not project else (f'<nav><a href="/{project}/">Matrix</a><a href="/{project}/walkthroughs/">Walkthroughs</a>'
                                   f'<a href="/{project}/reviews/">Reviews</a><a href="/{project}/briefs/">Briefs</a>'
                                   f'<a href="/{project}/reports/">Reports</a></nav>')
-    return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}<nav>{nav}</nav>{sub}{body}"
-            f"{SCRIPT}")
+    return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>{STYLE}"
+            f'<script src="/static/htmx.min.js"></script><nav>{nav}</nav>{sub}{body}{SCRIPT}')
 
 
 def pr_number(path):
@@ -745,6 +802,8 @@ class Handler(BaseHTTPRequestHandler):
         parts = [p for p in parts if p and p not in (".", "..") and "/" not in p]
         if not parts:
             return self.send(page(None, "owner-dash", "<p>Pick a project above.</p>"))
+        if parts == ["static", "htmx.min.js"]:
+            return self.send(HTMX.read_text(encoding="utf-8"), kind="text/javascript; charset=utf-8")
         project = parts[0]
         base = ROOT / project
         if not base.is_dir():
@@ -793,27 +852,30 @@ class Handler(BaseHTTPRequestHandler):
         names the version that page showed, so a stale tab cannot approve a newer head or brief."""
         parts = [unquote(p) for p in self.path.split("?")[0].split("/") if p]
         host = f"http://{self.headers.get('Host', '')}"
+        htmx = self.headers.get("HX-Request") == "true"
         if len(parts) != 2 or parts[1] != "approve" or parts[0] in (".", "..") or "/" in parts[0] \
                 or self.headers.get("Origin") != host or not (ROOT / parts[0]).is_dir():
-            return self.send(page(None, "Refused", "<p>Refused.</p>"), 403)
+            return self.send("Refused." if htmx else page(None, "Refused", "<p>Refused.</p>"), 403)
         form = parse_qs(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
         kind, name, seen, action = (form.get(k, [""])[0] for k in ("kind", "name", "version", "action"))
         valid = (kind == "pr" and name.isdigit()) or (kind == "brief" and BRIEF_NAME.fullmatch(name))
         path = valid and target(parts[0], "walkthrough" if kind == "pr" else "brief", name)
         if not path or action not in ("approve", "withdraw") or not path.is_file() or version(path) != seen:
-            return self.send(page(parts[0], "Out of date", "<p>This page is out of date. Reload it and look again."
-                                                           "</p>"), 409)
+            stale = "This page is out of date. Reload it and look again."
+            return self.send(stale if htmx else page(parts[0], "Out of date", f"<p>{stale}</p>"), 409)
         record(parts[0], kind, name, seen, action, "dashboard")
+        if htmx:
+            return self.send(standing_update(path))
         back = self.headers.get("Referer", "")
         self.send_response(303)
         self.send_header("Location", back[len(host):] if back.startswith(host + "/") else f"/{quote(parts[0])}/")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def send(self, body, status=200):
+    def send(self, body, status=200, kind="text/html; charset=utf-8"):
         data = body.encode()
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
