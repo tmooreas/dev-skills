@@ -1,6 +1,6 @@
 ---
 name: pr-matrix
-description: Rank the PRs that are ready to merge so the owner can approve the best ones first. One table, plain language, ordered by importance × work freed × ease of understanding ÷ (size × blast radius × dependence). Use for "pr matrix", "what should I approve", "rank the PRs".
+description: Rank the PRs that are ready to merge so the owner can approve the best ones first. One table, plain language, ordered by importance² × work freed × ease of understanding ÷ (size × blast radius × dependence). Use for "pr matrix", "what should I approve", "rank the PRs".
 ---
 
 # PR matrix
@@ -20,7 +20,7 @@ table they can read without opening any PR.
 
 Only PRs that are ready for an approval right now:
 
-- open, not draft;
+- open (a draft counts; PRs stay draft until merge, owner 2026-11-03);
 - an independent review verdict of PASS at the PR's **current** head (a PASS at
   an older head does not count; a restack or new commit needs its delta check);
 - CI green on that exact head;
@@ -35,7 +35,7 @@ and against the saved verdict; never carry a status forward from memory.
 ## Score
 
 ```
-score = importance × frees × clarity / (size × blast × dependence)
+score = importance² × frees × clarity / (size × blast × dependence)
 ```
 
 Score each factor from the PR's diff, body and review verdict. Be consistent
