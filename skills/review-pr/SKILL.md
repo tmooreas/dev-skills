@@ -205,6 +205,14 @@ Reuse it only for deals you cannot run, with attribution, after reproducing at
 least one deal's result from it. Missing or unaffordable mandatory proof remains
 NOT_REVIEWED. Do not spend beyond the task's authority to manufacture a verdict.
 
+Shared base runs (owner, 2026-11-03). When the project keeps a base-run store
+(`projects/<project>.md`), base outputs for the current main are computed once
+and reused by every review. Before running a base, look in the store for that
+main sha, deal and step: use it if present, and if absent, run it and publish
+it there. Use a copy, never the store itself. Reproduce at least one deal's base
+yourself and compare it to the store entry; a mismatch voids the store for that
+sha (report it). Head runs are always your own.
+
 ## 6. Red flags: every applicable review
 
 Report each class as a located finding, none found in inspected scope, or unchecked:
