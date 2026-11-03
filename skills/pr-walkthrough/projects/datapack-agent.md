@@ -36,8 +36,8 @@ deal's folder. No GitHub writes.
   (`definition.py` facts, `calculator.py` data, `layout.py` the tab).
 - Reviews: `/mnt/c/CodeProjects/_dpa_scratch/owner_review/lanes/<lane>/` (review and
   result files, dated sections; match the head SHA).
-- Size: `python dev/check_pr_size.py <base> <head> --pr N` (800-line guide; note any
-  owner exception). Reuse: `python dev/tools/inventory.py --grep <name>`.
+- Size: `python dev/check_pr_size.py <base> <head> --pr N` (400-line limit since owner
+  2026-11-03; PRs open then keep 800). Reuse: `python dev/tools/inventory.py --grep <name>`.
 - Read typed records, never printed banners: run records `<deal>/Logs/runs/<id>.json`
   (`exit_code`, `refused`, `outputs`, `result`), `result.qf_results`,
   `result.failed_builds[i].facts`, carry-forward records.

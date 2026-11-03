@@ -165,7 +165,7 @@ Keep each section short; the owner can ask for more.
    piece that looks heavy, not a blanket answer.
 10. **Limits and follow-ups:** known gaps, what is deliberately out of scope, what comes
     next and in which PR.
-11. **Size and order:** changed lines vs 800, what it is stacked on, what waits on it,
+11. **Size and order:** changed lines vs the project's limit, what it is stacked on, what waits on it,
     merge order.
 12. **Ask:** the one decision you need, if any (approve the merge, or a choice), with
     your recommendation.

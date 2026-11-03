@@ -97,8 +97,8 @@ gates apply. Here:
   A Reuse line citing only `--module <the file I edited>` is NOT_REVIEWED. (#214's B1
   fix ran `--module excel_build` and missed `data_reader.read_cleaned_parquet`, which
   `--grep parquet` lists.) Reviewers and the orchestrator re-run the greps.
-- Size: `python dev/check_pr_size.py <base> <head> --pr N` (800-line guide; owner
-  exceptions are recorded per PR).
+- Size: `python dev/check_pr_size.py <base> <head> --pr N` (400-line limit since owner
+  2026-11-03; PRs open then keep 800; other owner exceptions are recorded per PR).
 - Focused tests and their output; a result without them is NOT_REVIEWED.
 
 ## Paths
