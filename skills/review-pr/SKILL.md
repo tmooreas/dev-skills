@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Independently review a PR to a merge-decision standard. Check existing ownership, current-main behavior, customer-path proof, simplicity and architecture; execute focused tests, mutations, boundary probes and sound historical comparisons as applicable. Return exact-head PASS, BLOCKED or NOT_REVIEWED with executable evidence and a net-value call. Use for review-pr, review N, or final PR review.
+description: Independently review a PR to a merge-decision standard. Lead with a real-data verification sweep (changed behavior run at base and head over every available real deal, every difference explained), then check ownership, simplicity and architecture; mutations and boundary probes as applicable. Return exact-head PASS, BLOCKED or NOT_REVIEWED with executable evidence and a net-value call. Use for review-pr, review N, or final PR review.
 ---
 
 # PR review drill
@@ -10,6 +10,15 @@ Correctness alone does not justify needless ownership duplication or machinery.
 The deliverable is an independent exact-head verdict the owner can act on, a
 complete finding list with evidence, and a net-value call: worth it, worth it with
 a change, or not worth the burden.
+
+Real data first (owner, 2026-11-03). For any runtime change the main evidence is a
+sweep: run the changed path at base and at head on every real deal available, in
+copies, through the real runners, and diff the outputs. Every changed cell, count,
+refusal or message is explained as intended or reported as a finding. Code reading
+directs the sweep and judges shape; it does not replace it. A finding no real deal
+or run shows must name the ordinary input that triggers it (LIKELY) or it is a
+note. Do the sweep before the code passes in sections 1, 2 and 6, and report it
+first in the verdict.
 
 Before starting, bring the skills up to date by running:
 
@@ -182,18 +191,18 @@ Permanent regressions should catch plausible consumer-visible bugs, not wiring,
 source text, mock echoes or incidental defaults. An independent reviewer returns
 fixes to the implementer unless explicitly authorized to change source.
 
-## 5. Historical population and reuse
+## 5. Real-data sweep (required for runtime changes)
 
-Where a historical population exists, establish the whole applicable population
-and execute changed behavior over it, within authorized resource bounds. Report
-selection/exclusions, same/changed/refused/error distribution and wrong changes.
-Compare BOTH versions per input for no-regression/equivalence claims. A spot check,
-empty replay or count of identical exceptions is not a sound sweep.
+Establish the whole applicable real population (every real deal and real run
+record the change can touch) and execute the changed behavior over it at base and
+head, within authorized resource bounds. Report selection/exclusions,
+same/changed/refused/error distribution, and an explanation for each changed
+output. A spot check, a fixture-only run, an empty replay or a count of identical
+exceptions is not a sweep. A runtime PR with no sweep is NOT_REVIEWED.
 
-Do not rerun a completed author sweep merely to repeat evidence. Read its executable
-method, revisions, manifest/results and selection criteria, and determine whether
-it supports the exact claim. Reuse sound proof with attribution; rerun only when
-missing/disputed and authorized. Missing or unaffordable mandatory proof remains
+Run the sweep yourself; an author's sweep is a claim to check, not the evidence.
+Reuse it only for deals you cannot run, with attribution, after reproducing at
+least one deal's result from it. Missing or unaffordable mandatory proof remains
 NOT_REVIEWED. Do not spend beyond the task's authority to manufacture a verdict.
 
 ## 6. Red flags: every applicable review
