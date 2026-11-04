@@ -2,7 +2,7 @@
 
 ## Base-run store
 
-- **Path:** `~/dpa-lanes/base_runs/<main sha8>/<deal>/<step>/`. The one exception is held-out deals (Titan, Weldfit, Integrity, Pave): their entries live in `<vault>/base_runs/<main sha8>/<step>/` and report counts only.
+- **Path:** `~/dpa-lanes/base_runs/<main sha8>/<deal>/<step>/`. The one exception is a deal still held out (not yet run cold once): its entries live in `<vault>/base_runs/<main sha8>/<step>/` and report counts only.
 - **Steps:** `ingest`, `cleaning-report`, `build`, `verify`, `deck`, and `query-<name>` for a named query set. Each entry holds the runner's outputs plus `MANIFEST.json`:
   - `command`, `cwd` and `main_sha`;
   - `inputs`: path → sha256 for every raw file and every file under the deal's `Docs/` (`DEAL.md`, `deal.yml`, decisions), since those change the outputs too;
