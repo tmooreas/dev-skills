@@ -32,6 +32,8 @@ generic skill only with the owner's say-so.
 
 Agents share this machine with the orchestrator's local test suites. To stop a process, kill only the PIDs you started; never pattern kills (`pkill -f pytest`, `killall python`). On 2026-10-29 one such kill stopped two merge-gate suites mid-run.
 
+Dispatch by measured headroom, not a fixed agent count (owner 2026-11-05). Before each spawn, read `free -g` (available) and weigh the job: read-only, review-of-text and mechanical git lanes are light (under 1 GB); a lane that builds, ingests or recalculates a real deal is heavy (several GB, through `~/scratch/bigjob`, one slot per lane); Excel is one at a time behind the lock. Start light lanes while available memory stays above about 4 GB; start a heavy lane only when its expected size fits above that margin.
+
 ## Launch recipe
 
 Workers run in tmux inside WSL (owner 2026-10-08), session `dpa`, one window per lane:
