@@ -18,7 +18,9 @@ refusal or message is explained as intended or reported as a finding. Code readi
 directs the sweep and judges shape; it does not replace it. A finding no real deal
 or run shows must name the ordinary input that triggers it (LIKELY) or it is a
 note. Do the sweep before the code passes in sections 1, 2 and 6, and report it
-first in the verdict.
+first in the verdict. It must reach the changed path on the real data that
+motivated the change, then run the synthetic corpus as the regression guard
+(section 5).
 
 Before starting, bring the skills up to date by running:
 
@@ -199,6 +201,16 @@ head, within authorized resource bounds. Report selection/exclusions,
 same/changed/refused/error distribution, and an explanation for each changed
 output. A spot check, a fixture-only run, an empty replay or a count of identical
 exceptions is not a sweep. A runtime PR with no sweep is NOT_REVIEWED.
+
+Real data that motivated it first, then synthetic (owner, 2026-11-05). The sweep
+must reach the changed path on the real data that caused the feature to be
+built: the deal, file or run named in the PR's reason, and every other real deal
+holding the same kind of input. When the path is opt-in (a declaration, setting
+or new input), set it up on those deals as the user would; a real deal that
+never reaches the changed path proves only "unchanged" and is not the sweep.
+Then run the project's synthetic corpus at base and head as the regression
+guard over everything else. The corpus is maintained and grows: when a PR adds
+a behavior no synthetic case reaches, say so as a finding against the corpus.
 
 Run the sweep yourself; an author's sweep is a claim to check, not the evidence.
 Reuse it only for deals you cannot run, with attribution, after reproducing at

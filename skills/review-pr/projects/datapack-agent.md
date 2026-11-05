@@ -12,3 +12,8 @@
 - **Using an entry:** copy it into your scratch before running anything on it, since runners write into deal folders. Check that `MANIFEST.json` `main_sha` equals your base, and that the input hashes match your deal copy.
 - **Reproduction check:** run one deal's base step yourself and compare its outputs with the entry. Parquet: the same cells. Workbook: the same Check rows and values. Any difference voids that sha's entries; report it to the orchestrator.
 - **Cleanup:** entries for a main sha older than the last 3 merges may be deleted by the orchestrator.
+
+## Sweep data
+
+- **Real first:** the deal whose problem the PR's reason names, plus every vault or `Deals/` deal holding the same kind of input (e.g. a model P&L: Titan's Financial Model). Opt-in features get declared on those deals as an associate would, following the skill text at head.
+- **Synthetic corpus, then:** the committed synthetic deals (`Deals/NovaTech_Synthetic` and the test fixtures), at base and head. A new behavior no synthetic deal reaches is a finding against the corpus; name the case to add.
