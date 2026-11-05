@@ -105,6 +105,10 @@ gates apply. Here:
   their own searches with words other than the author's, not the author's list again.
 - Size: `python dev/check_pr_size.py <base> <head> --pr N` (400-line limit since owner
   2026-11-03; PRs open then keep 800; other owner exceptions are recorded per PR).
+- Scope (owner 2026-11-05): one PR solves one issue or implements at most one feature.
+  Briefs name that one issue or feature; anything else found on the way is an issue,
+  not more commits. A bug already on main is fixed in this PR only if the PR causes or
+  worsens it. Review fix rounds that outgrow the size limit or the one issue end in a split.
 - Focused tests and their output; a result without them is NOT_REVIEWED.
 
 ## Paths

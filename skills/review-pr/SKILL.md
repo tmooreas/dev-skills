@@ -54,6 +54,13 @@ or telemetry findings are not functional gates. Missing required proof is
 NOT_REVIEWED, not an invented defect or PASS. Lesser observations are notes with
 named follow-ups, not extra scope quietly added to the PR.
 
+One PR solves one issue or implements at most one feature. A PR that does more
+blocks until split. A defect that already exists on base goes to an issue, not
+into the PR, unless the PR causes or worsens it. After each fix round, recheck
+scope and size against the original problem: if fixes pushed the PR past its
+size limit or beyond that one issue or feature, stop and split instead of
+approving.
+
 State each defect's reachability beside its severity: SEEN (the trigger is in real
 data or a real run), LIKELY (ordinary inputs or workflows produce it; say which), or
 CONTRIVED (only a hand-built input or developer-only step). A hand-built repro
