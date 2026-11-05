@@ -93,11 +93,15 @@ gates apply. Here:
 - Reuse inventory BEFORE writing each new function, constant, list or writer (CLAUDE.md,
   CONTRIBUTING "Reuse first"): `python dev/tools/inventory.py --grep <word>` over the
   WHOLE plugin, once per capability word (what it reads or does: `parquet`, `cleaned`,
-  `sheet`, `cagr`), never `--module` alone. The PR's Reuse section lists, per new
-  symbol, the commands run and the hits (path:line) with reuse / distinct-because.
-  A Reuse line citing only `--module <the file I edited>` is NOT_REVIEWED. (#214's B1
-  fix ran `--module excel_build` and missed `data_reader.read_cleaned_parquet`, which
-  `--grep parquet` lists.) Reviewers and the orchestrator re-run the greps.
+  `sheet`, `cagr`), never `--module` alone. Also search (`git grep`) the data each
+  capability reads or writes: field, column, setting and table names (e.g.
+  `period_coverage`), since a copy under another name reads the same data (owner
+  2026-11-05: three full-year helpers all read `period_coverage`). The PR's Reuse
+  section lists, per new symbol, the commands run and the hits (path:line) with
+  reuse / distinct-because. A Reuse line citing only `--module <the file I edited>`
+  is NOT_REVIEWED. (#214's B1 fix ran `--module excel_build` and missed
+  `data_reader.read_cleaned_parquet`, which `--grep parquet` lists.) Reviewers run
+  their own searches with words other than the author's, not the author's list again.
 - Size: `python dev/check_pr_size.py <base> <head> --pr N` (400-line limit since owner
   2026-11-03; PRs open then keep 800; other owner exceptions are recorded per PR).
 - Focused tests and their output; a result without them is NOT_REVIEWED.

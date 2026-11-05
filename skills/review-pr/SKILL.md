@@ -102,6 +102,11 @@ different names, aliases/re-exports and live call sites. Symbol definitions and
 references use available language-server tools; text search alone is not code
 intelligence when an LSP is available.
 
+Search with your own words, not the author's: re-running the PR's Reuse list
+checks only what the author thought of. Include the data each new helper reads
+or writes (field, column, setting and table names): a copy under another name
+reads the same data (owner 2026-11-05).
+
 For every NEW helper, predicate, parser or IO adapter record:
 
 `helper -> existing owner (path:line) -> reuse / remove / distinct because evidence`
