@@ -95,8 +95,9 @@ gates apply. Here:
   WHOLE plugin, once per capability word (what it reads or does: `parquet`, `cleaned`,
   `sheet`, `cagr`), never `--module` alone. Also search (`git grep`) the data each
   capability reads or writes: field, column, setting and table names (e.g.
-  `period_coverage`), since a copy under another name reads the same data (owner
-  2026-11-05: three full-year helpers all read `period_coverage`). The PR's Reuse
+  `full_years`), since a copy under another name reads the same data (owner
+  2026-11-05: "latest full year, else latest" is inline in three places that only
+  `git grep full_years` finds). The PR's Reuse
   section lists, per new symbol, the commands run and the hits (path:line) with
   reuse / distinct-because. A Reuse line citing only `--module <the file I edited>`
   is NOT_REVIEWED. (#214's B1 fix ran `--module excel_build` and missed
