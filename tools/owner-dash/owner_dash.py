@@ -90,7 +90,31 @@ def show(args):
 
 
 def render(md):
-    return MARKDOWN.render(md)
+    return MARKDOWN.renderer.render(index_bullets(MARKDOWN.parse(md)), MARKDOWN.options, {})
+
+
+def index_bullets(tokens):
+    """Label every list item with its section and its place there (3.12; nested 3.12.2), counted across the
+    section's lists, so the owner can point at one bullet. A section starts at a heading or a paragraph led by a bold
+    number (**3.); without a number the count carries on."""
+    section, count, path = "", 0, []
+    for i, token in enumerate(tokens):
+        if token.type == "inline" and not path:
+            m = re.match(r"\s*(?:\*\*)?(\d+a?)[.)\s]", token.content)
+            if m and (tokens[i - 1].type == "heading_open" or token.content.lstrip().startswith("**")):
+                section, count = m.group(1), 0
+        elif token.type in ("bullet_list_open", "ordered_list_open"):
+            path.append(count if not path else 0)
+        elif token.type in ("bullet_list_close", "ordered_list_close"):
+            done = path.pop()
+            count = done if not path else count
+        elif token.type == "list_item_open":
+            path[-1] += 1
+            mark = Token("html_inline", "", 0)
+            mark.content = f"<span class=ix>{'.'.join([section] * bool(section) + [str(n) for n in path])}</span> "
+            first = next(t for t in tokens[i:] if t.type == "inline")
+            first.children = [mark] + (first.children or [])
+    return tokens
 
 
 def repo_of(args):
@@ -531,6 +555,7 @@ def walkthrough_html(path):
     if not path.with_suffix(".diff").is_file():
         return files_html + link_files(path, render(path.read_text(encoding="utf-8")))
     out, files, placed, head = place(path)
+    out = index_bullets(out)
     total, missing, names = coverage(path, files, placed)
     shown = total - sum(changed(h) for _, h in missing)
     status = (f'<p class={"ok" if not missing else "bad"}>Diff at {html.escape(head)}: {shown} of {total} changed lines '
@@ -717,6 +742,7 @@ form.ap button{margin-left:10px;padding:4px 12px;cursor:pointer}
 form.ap .msg{margin-left:10px}
 #foldfix{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
+.ix{color:#888;font:12px monospace;margin-right:2px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
 .diff pre{margin:0;padding:4px 0;font-size:12.5px;background:#fff}
 .diff pre span{display:block;padding:0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
