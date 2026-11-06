@@ -130,7 +130,9 @@ section still appears, and the coverage check still passes.
    and make no merge recommendation. Whenever the example has an output file (a
    workbook, deck, run record, report), attach the actual file
    (`owner-dash put walkthrough N - --attach <file>`) and link it by file name in the
-   text (`[deal.xlsx](deal.xlsx)`), naming the tab and cells to look at.
+   text (`[deal.xlsx](deal.xlsx)`), naming the tab and cells to look at. Attach the
+   file as the tool or Excel saved it: never rewrite its XML (an ElementTree rewrite of
+   2026-11-06 made Excel refuse to open the #422 workbooks); name the tab in the text.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
