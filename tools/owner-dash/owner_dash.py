@@ -740,7 +740,8 @@ button.fold{margin:12px 0 4px;padding:4px 12px;cursor:pointer}
 form.ap{margin:8px 0 14px;padding:8px 10px;border:1px solid #ccc;background:#fafafa}
 form.ap button{margin-left:10px;padding:4px 12px;cursor:pointer}
 form.ap .msg{margin-left:10px}
-#foldfix{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
+#foldfix,#folddiff{position:fixed;right:12px;top:50%;display:none;padding:6px 10px;cursor:pointer;box-shadow:0 1px 4px #0003}
+#folddiff{top:calc(50% + 40px)}
 details.dx{margin:4px 0 10px}details.dx>summary{cursor:pointer;color:#0b5cad;font-size:13px}
 .ix{color:#888;font:12px monospace;margin-right:2px}
 .diff{border:1px solid #ddd;margin:6px 0}.df{background:#eef;padding:2px 8px;font:13px monospace}
@@ -757,7 +758,7 @@ tr[data-pr]>td,tr.wt summary{transition:background 1s}tr.fresh>td,summary.fresh{
 .tag{margin-left:8px;padding:0 6px;border-radius:8px;background:#d97706;color:#fff;font-size:11px;font-weight:600}
 </style>"""
 
-SCRIPT = """<button id=foldfix></button><script>
+SCRIPT = """<button id=foldfix></button><button id=folddiff></button><script>
 // Open sections are remembered per page: each <details> is keyed by its summaries' text, outermost first,
 // plus how many earlier sections share that text.
 const store = "open:" + location.pathname;
@@ -783,24 +784,38 @@ document.addEventListener("toggle", () => {
   placeFold();
 }, true);
 
-// A collapse button pinned to the right edge while the middle of the screen is inside an open walkthrough.
-const fold = document.getElementById("foldfix");
-let showing = null;
-function placeFold() {
-  showing = [...document.querySelectorAll("tr.wt details[open]")].find(d => {
+// Two collapse buttons pinned to the right edge: one for the open walkthrough the middle of the screen is in,
+// one for the open diff inside it. Each closes only its own section.
+const fold = document.getElementById("foldfix"), foldDiff = document.getElementById("folddiff");
+let showing = null, showingDiff = null;
+function atMiddle(selector) {
+  return [...document.querySelectorAll(selector)].find(d => {
     const r = d.getBoundingClientRect();
     return r.top < innerHeight / 2 && r.bottom > innerHeight / 2;
   }) || null;
+}
+function placeFold() {
+  showing = atMiddle("tr.wt>td>details[open]");
+  showingDiff = showing && atMiddle("tr.wt details.dx[open]");
   fold.style.display = showing ? "block" : "none";
+  foldDiff.style.display = showingDiff ? "block" : "none";
   if (showing) fold.textContent = "Collapse " + showing.querySelector(":scope>summary").textContent;
+  if (showingDiff) foldDiff.textContent = "Collapse " + showingDiff.querySelector(":scope>summary").textContent;
 }
 fold.onclick = () => {
   const row = showing.closest("tr").previousElementSibling;
   showing.open = false;
   row.scrollIntoView({block: "center"});
+  placeFold();
+};
+foldDiff.onclick = () => {
+  showingDiff.open = false;
+  showingDiff.scrollIntoView({block: "center"});
+  placeFold();
 };
 addEventListener("scroll", placeFold, {passive: true});
 addEventListener("resize", placeFold);
+addEventListener("toggle", placeFold, true);
 placeFold();
 
 document.addEventListener("selectionchange", () => {
