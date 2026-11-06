@@ -844,7 +844,7 @@ function fresh() {
 }
 if (document.getElementById("live")) fresh();
 
-const before = new WeakMap();
+const before = new WeakMap(), folds = new WeakMap();
 document.addEventListener("htmx:beforeRequest", e => {
   const form = e.detail.elt;
   if (!form.matches("form.ap")) return;
@@ -853,6 +853,7 @@ document.addEventListener("htmx:beforeRequest", e => {
   const approve = form.elements.action.value === "approve";
   const spots = [...document.querySelectorAll(`[data-item="${form.dataset.item}"]`)];
   before.set(form, spots.map(s => [s, s.innerHTML]));
+  if (approve) folds.set(form, form.closest("tr.wt details"));
   for (const s of spots) {
     if (s.matches(".mk")) s.textContent = approve ? " · approved" : "";
     if (!s.matches("form.ap")) continue;
@@ -877,7 +878,13 @@ document.addEventListener("htmx:afterRequest", e => {
   if (!saved) return;
   before.delete(form);
   saving--;
-  if (e.detail.successful) return;
+  const d = folds.get(form);
+  folds.delete(form);
+  if (e.detail.successful) {
+    // An approved walkthrough is done with: fold it and bring its matrix row back into view.
+    if (d && d.open) { d.open = false; d.closest("tr").previousElementSibling.scrollIntoView({block: "center"}); }
+    return;
+  }
   for (const [s, was] of saved) s.innerHTML = was;
   const msg = document.createElement("span"), xhr = e.detail.xhr;
   msg.className = "bad msg";
