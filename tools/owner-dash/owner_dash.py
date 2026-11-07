@@ -584,7 +584,7 @@ def file_url(item):
 
 def link_files(path, body):
     for a in attachments(path):
-        body = body.replace(f'href="{a.name}"', f'href="{file_url(a)}"')
+        body = body.replace(f'href="{a.name}"', f'href="{file_url(a)}"').replace(f'src="{a.name}"', f'src="{file_url(a)}"')
     return body
 
 

@@ -133,6 +133,11 @@ section still appears, and the coverage check still passes.
    text (`[deal.xlsx](deal.xlsx)`), naming the tab and cells to look at. Attach the
    file as the tool or Excel saved it: never rewrite its XML (an ElementTree rewrite of
    2026-11-06 made Excel refuse to open the #422 workbooks); name the tab in the text.
+   When the PR changes what a workbook or deck shows (owner 2026-11-07), also attach
+   before/after LibreOffice screenshots of the cells that changed, base build beside
+   head build, and embed them (`![before](before.png)`). Render a copy, never the
+   attached file: `soffice --headless --convert-to pdf` on a copy with the tab active
+   and a print area around the cells, then `pdftoppm -png -r 110`; crop to the cells.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
