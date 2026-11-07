@@ -115,6 +115,9 @@ gates apply. Here:
   Briefs name that one issue or feature; anything else found on the way is an issue,
   not more commits. A bug already on main is fixed in this PR only if the PR causes or
   worsens it. Review fix rounds that outgrow the size limit or the one issue end in a split.
+  A review finding that is a different defect from the PR's issue is its own PR (stacked if
+  it needs this one), even when this PR exposed it (owner 2026-11-07, on #393: `_row`
+  pairing and the CP1 reject hole should have been two PRs).
 - Focused tests and their output; a result without them is NOT_REVIEWED.
 
 ## Paths

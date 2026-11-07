@@ -59,7 +59,8 @@ blocks until split. A defect that already exists on base goes to an issue, not
 into the PR, unless the PR causes or worsens it. After each fix round, recheck
 scope and size against the original problem: if fixes pushed the PR past its
 size limit or beyond that one issue or feature, stop and split instead of
-approving.
+approving. A finding that is a different defect from the PR's issue (even one the PR
+exposes) is reported as its own PR to open, stacked if needed, never "fix it here".
 
 State each defect's reachability beside its severity: SEEN (the trigger is in real
 data or a real run), LIKELY (ordinary inputs or workflows produce it; say which), or
