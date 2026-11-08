@@ -124,3 +124,5 @@ gates apply. Here:
 
 - Lanes, results and reviews: `/mnt/c/CodeProjects/_dpa_scratch/owner_review/lanes/<lane>/`.
 - Briefs and worker sessions: `~/dpa-lanes/` (not `/tmp`, which a reboot clears).
+
+- Excel automation crashes leave ~1.4 GB full dumps in C:\Users\tmoore\AppData\Local\CrashDumps (policy keeps 10). After any Excel run, delete EXCEL.EXE.*.dmp there.
