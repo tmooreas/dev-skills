@@ -137,10 +137,11 @@ section still appears, and the coverage check still passes.
    before/after LibreOffice screenshots of the cells that changed, base build beside
    head build, and embed them (`![before](before.png)`). Render a copy, never the
    attached file: in a copy, hide every other sheet (deleting them breaks formulas;
-   LibreOffice ignores print areas and exports the whole workbook: 540 pages, 15
+   LibreOffice ignores print areas and may still export hidden sheets: 540 pages, 15
    minutes on WV), then
-   `soffice --headless --convert-to pdf` (one at a time; parallel runs hang),
-   `pdftoppm -png -r 110`, and crop to the cells.
+   `soffice --headless --convert-to pdf` (one at a time; parallel runs hang), find the
+   tab's page with `pdftotext` (search a label on it), `pdftoppm -png -r 110 -f N -l N`,
+   and crop to the cells.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
