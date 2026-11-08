@@ -138,12 +138,13 @@ headings.
    When the PR changes what a workbook or deck shows (owner 2026-11-07), also attach
    before/after LibreOffice screenshots of the cells that changed, base build beside
    head build, and embed them (`![before](before.png)`). Render a copy, never the
-   attached file: in a copy, hide every other sheet (deleting them breaks formulas;
-   LibreOffice ignores print areas and may still export hidden sheets: 540 pages, 15
-   minutes on WV), then
+   attached file: in a copy, hide every other sheet and delete the `_xlnm.Print_*`
+   defined names (deleting sheets breaks formulas; LibreOffice still exports a hidden
+   sheet that has a print area: 731 pages on WV), then
    `soffice --headless --convert-to pdf` (one at a time; parallel runs hang), find the
    tab's page with `pdftotext` (search a label on it), `pdftoppm -png -r 110 -f N -l N`,
-   and crop to the cells.
+   and crop to the cells. Formula view does not reach the PDF: to show formulas, add a
+   `FORMULATEXT` column in the copy and label it as added for the screenshot.
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the
