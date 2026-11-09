@@ -113,6 +113,20 @@ text when the runtime supports messages. Do not export unrelated/private payload
   Keep the same reviewer across rounds. A separately requested additional review
   is explicit, not an automatic extra model call. Independent means not the
   implementer, including when both use the same provider/model.
+- **Route by kind of work** (owner 2026-10-23: "delegate more mechanical eg git work
+  to sonnet 5.5 in well scoped briefs"; 2026-11-09: "r we using sonnet for mechanical
+  work"). The project adapter names one model per role:
+  - **mechanical executor**, a cheaper model (e.g. Sonnet): work with a fixed spec and
+    no design choice: syncs and merges from main, rebases with a stated conflict rule,
+    test and CI reruns, golden rebakes to a stated spec, screenshots, walkthroughs of
+    a reviewed head, relabels to wording the owner approved, PR body edits, worktree
+    cleanup;
+  - **implementer**, the strongest model (e.g. Opus): design, and fixes whose cause is
+    still open;
+  - **reviewer**, a model family other than the implementer's (e.g. GPT): every
+    independent review.
+  A mechanical task that meets a design choice or an unexplained failure stops and
+  hands back to an implementer; it does not decide.
 - The orchestrator scopes and integrates; it does not quietly become a second
   code implementer. Disclose any integration-only edit and include it in the
   independent final-head review.
@@ -246,14 +260,17 @@ Prefer direct author/reviewer evidence exchange where available; otherwise share
 small artifacts, not full transcripts through the orchestrator.
 
 Use a cheaper **mechanical executor** only for a predetermined, explicitly
-permitted git action. It is not a reviewer or substitute implementer. Normally
+permitted task with a fixed spec (see "Route by kind of work"). It is not a
+reviewer or substitute implementer. Normally
 the author merges; the owner may explicitly delegate mechanical execution.
 Run that executor asynchronously, bounded and isolated; a single serial batch
 avoids a third persistent per-PR session. Supply an exact PR/head allowlist,
 verified approval sources, required PASS/CI evidence, merge order and repository
 commands/hooks. The executor rechecks every gate immediately before each action.
-Stop on head drift, conflicts, failed/missing checks or authorization ambiguity;
-return evidence to the owner/reviewer. No conflict decisions, arbitrary code edits,
+Stop on head drift, conflicts the stated rule does not cover, failed/missing checks
+or authorization ambiguity;
+return evidence to the owner/reviewer. No conflict decisions beyond the stated rule,
+code edits beyond the spec,
 force pushes, stash/reset/cleanup, bypasses, auto-merge waiting on future gates or
 production actions. Serialize merges; refresh main/dependencies after each and
 verify the resulting merge state/SHA. A green CI PR with no required PASS stays held.

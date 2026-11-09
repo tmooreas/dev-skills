@@ -18,9 +18,9 @@ generic skill only with the owner's say-so.
   the orchestrator's context aggressively instead of restarting; after a compaction, re-read
   the ledger before acting (it wins over the summary). Jobs are queued in
   `~/dpa-lanes/queue.txt`, started one at a time by the `queue` tmux window.
-- Models (owner 2026-10-09, after Claude usage ran out): `openai-codex/gpt-6.1-sol`
-  implements, reviews (a separate session from the implementer) and executes
-  mechanical git. `openai-codex/gpt-6-astra` is an advisor only: a bounded, read-only
+- Models, as agents in `~/.omp/agent/agents/` (the skill's "Route by kind of work"):
+  `dpa-mech` is Sonnet 5.5 (owner 2026-10-23), `dpa-impl` is Opus 5.5, `dpa-review` is
+  `openai-codex/gpt-6.1-sol` (owner 2026-11-02). `openai-codex/gpt-6-astra` is an advisor only: a bounded, read-only
   question on a hard design or a disputed finding, with a compact packet; never routine
   review or implementation (expensive). Claude models only when `omp usage` shows
   allowance left; warn the owner about Claude usage before launching one.
@@ -68,7 +68,6 @@ gates apply. Here:
 - Markdown edits (FEATURE_MAP, SKILL, references, docs) change only the words that must change, in place: never rewrite, reword or reflow a line or paragraph wholesale, so the owner's diff shows just the change (owner 2026-10-22). Every brief carries this rule.
 - Every walkthrough's Code section includes a "data journey": how the data flows from source to output through the changed code, before → after, illustrated with the actual code lines that move it (owner 2026-10-22).
 - Agent context is the orchestrator's job (owner 2026-10-23). Never send a review round or follow-up to a worker whose context is large (> ~150K tokens); long contexts bill as extra usage, not the weekly plan, and on 10-22 they exhausted the monthly spend cap and stalled every lane. Start a fresh agent instead, with a short handoff: worktree path, branch, head, what's done, what's left, the review file. Reviewers likewise: a fresh reviewer per round when the previous one is long.
-- Mechanical work goes to `dpa-mech` (Sonnet 5.5) in a tightly scoped brief (owner 2026-10-23): git syncs and merges from main, merge-on-green, golden rebakes to a stated spec, conflict resolution with a stated rule, worktree cleanup, CI reruns, PR body edits. Opus (`dpa-impl`) only for design, code changes that need judgment, and the walkthroughs.
 - Every brief goes on the owner dashboard (owner 2026-11-02): `owner-dash --project datapack-agent put brief <name> <file>` when it is first shown to the owner, and again on every change. Its name matches the file in `~/dpa-lanes/briefs/`. The first line under the title states its status: awaiting approval, approved (date), or done (PR links).
 - The owner approves PRs and briefs with the dashboard's Approve button (owner 2026-11-02); a chat approval still counts, and you record it at once with `owner-dash --project datapack-agent record approve pr|brief <N|name>` so the page agrees. Before every merge or launch, run `owner-dash --project datapack-agent approvals`. A PR approval counts only at the head it names (`current`). A head that moved afterwards needs a new click or the restack rule above, stated in chat. Ledger every approval you act on.
 - A brief approval never approves a PR (owner 2026-11-06, on retro briefs for PRs started without one): it approves the scope; the PR still needs its own walkthrough and approval at its head.
