@@ -56,10 +56,15 @@ Recompute after every merge: dependence drops for the PRs stacked on it, and
 
 ## Output
 
-One table, highest score first, except that a stacked PR never ranks above the PR it
-sits on: move it to just below its base (owner 2026-11-02). Every ready PR is in it:
-no second "also ready" or "approved" table (owner 2026-11-02, "all ready prs should be
-in one list ordered by pr matrix criteria"). Stacking shows in "(on #N)" and dependence.
+One table in merge order: merge order beats score (owner 2026-11-09). A PR that has to
+land before another ranks above it, whatever the scores. That covers a stacked PR's base
+(owner 2026-11-02), a known conflict whose fix is assigned to the later PR, and any
+declared order (e.g. "merge #499 with #510"). Among PRs free to go in any order, higher
+score first. Every ready PR is in it, approved ones included until they merge, marked
+"approved": no second "also ready" or "approved" table (owner 2026-11-02, "all ready prs
+should be in one list ordered by pr matrix criteria"). Stacking shows in "(on #N)" and
+dependence. The tracker merges top-down; an approved PR waits behind an unapproved one
+above it that it conflicts with or depends on.
 
 | # | PR | What it does (plain) | Lines | Score |
 |---|---|---|---|---|
@@ -72,8 +77,7 @@ in one list ordered by pr matrix criteria"). Stacking shows in "(on #N)" and dep
 
 Under the table:
 
-1. **Merge order** for each stack, since the table already keeps a base above its
-   dependents.
+1. **Merge order** for each stack or conflict chain, matching the table.
 2. **Not in the matrix:** PR, what it waits on.
 3. **Known conflicts** between ranked PRs, and which one has to fix it when it
    lands second.
