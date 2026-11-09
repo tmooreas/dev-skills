@@ -351,10 +351,11 @@ and ledger every approval you act on.
   merge when the gate passes; do not ask again.
 - **After a rebase or merge from main** the approval carries only when a machine diff
   proves nothing was added: `git range-diff` shows every commit `=`, or the diff of the
-  PR's own diff only removes lines (owner 2026-11-05). Merge through the gate and send
-  a one-line note. A hand-resolved conflict, or any added or changed line, needs a new
-  approval: show those lines to the owner as before/after text, or as a delta
-  walkthrough (e.g. DPA #507: one hand-merged paragraph).
+  PR's own diff only removes lines (owner 2026-11-05), or a conflict was resolved by
+  keeping both sides' lines byte-identical with no line written by hand (owner
+  2026-11-09). Merge through the gate and send a one-line note. Any line written or
+  changed by hand needs a new approval: show those lines to the owner as before/after
+  text, or as a delta walkthrough (e.g. DPA #507: one hand-merged paragraph).
 - **An approved PR gets no new commits** beyond that carry-over. A follow-up change,
   even one the owner asks for while approving, is its own PR, stacked if it needs the
   first (e.g. DPA #503 approved, its relabel became #518).
