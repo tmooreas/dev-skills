@@ -60,11 +60,14 @@ One table in merge order: merge order beats score (owner 2026-11-09). A PR that 
 land before another ranks above it, whatever the scores. That covers a stacked PR's base
 (owner 2026-11-02), a known conflict whose fix is assigned to the later PR, and any
 declared order (e.g. "merge #499 with #510"). Among PRs free to go in any order, higher
-score first. Every ready PR is in it, approved ones included until they merge, marked
-"approved": no second "also ready" or "approved" table (owner 2026-11-02, "all ready prs
-should be in one list ordered by pr matrix criteria"). Stacking shows in "(on #N)" and
-dependence. The tracker merges top-down; an approved PR waits behind an unapproved one
-above it that it conflicts with or depends on.
+score first. Every PR waiting on the owner is in it: no second "also ready" table (owner
+2026-11-02, "all ready prs should be in one list ordered by pr matrix criteria").
+Stacking shows in "(on #N)" and dependence. An approved PR leaves the table (owner
+2026-11-09, "theyre beyond me so dont need to be there anymore"). One line above the
+table, "Approved, merging (nothing needed from you)", lists them in merge order with
+what each waits on. A PR that needs a re-look after a rebase goes back into the table.
+The tracker merges in that order; an approved PR waits behind an unapproved one it
+conflicts with or depends on.
 
 | # | PR | What it does (plain) | Lines | Score |
 |---|---|---|---|---|

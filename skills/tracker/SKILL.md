@@ -377,7 +377,7 @@ Lead with customer/definition-of-done movement and critical path, then the
 and satisfied dependencies, not already owner-approved**. Give purpose, exact
 head, reviewer and brief proof. Reconfirm earlier PASS heads before reusing them.
 Already owner-approved PASS PRs belong in the authorized merge queue, not another
-review request (the matrix keeps their rows, marked approved, until they merge:
+review request (they leave the matrix table for its "Approved, merging" line:
 pr-matrix). NOT_REVIEWED/BLOCKED/deferred PRs appear only as status/holds.
 
 Talking to the owner:
