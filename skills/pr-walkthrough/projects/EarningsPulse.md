@@ -48,8 +48,10 @@ does not restate their full text.
 - Section 9: under "Judgments in code", each judgment carries its check kind: STRUCTURE,
   IDENTITY, CROSS-SOURCE, or ACCEPT + MEASURE (with where it is measured). The owner is the
   owner (a quoted ruling), a dated DECISIONS.md entry, or nobody (a finding).
-- Section 11 uses the hard cap in CLAUDE.md (1,500 changed lines today; it may drop to
-  800), not 800.
+- Section 11: every changed line counts, tests and docs included. 400 is the hard cap and 250 is the target
+  (owner, 2026-11-09: "ya 400 absolute max id prefer like 250"). Over 400 is a stop; over 250 is a note.
+- One bug or one feature per PR, with no side effects (owner, 2026-11-09). List each part of the diff and
+  the concern it serves; a part serving a second concern, a rider or an opportunistic refactor is a stop.
 - Add section **9a. Good shape**, one line each, a miss is a note, not a block:
   - Does it change the existing owner instead of adding a rule beside it?
   - Does it read what the filing or release declares instead of reconstructing it?
