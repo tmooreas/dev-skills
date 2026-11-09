@@ -377,7 +377,22 @@ Lead with customer/definition-of-done movement and critical path, then the
 and satisfied dependencies, not already owner-approved**. Give purpose, exact
 head, reviewer and brief proof. Reconfirm earlier PASS heads before reusing them.
 Already owner-approved PASS PRs belong in the authorized merge queue, not another
-review request. NOT_REVIEWED/BLOCKED/deferred PRs appear only as status/holds.
+review request (the matrix keeps their rows, marked approved, until they merge:
+pr-matrix). NOT_REVIEWED/BLOCKED/deferred PRs appear only as status/holds.
+
+Talking to the owner:
+- Short plain words, one fact per sentence. Link each PR by its changes page
+  (pr-walkthrough Rules).
+- After each merge, say what merged and what is next: the next PR in matrix order and
+  what the merge unblocked.
+- Ask a short decision in chat; put anything longer in a brief (owner 2026-11-09: "if
+  they are just brief enough for chat just ask me here otherwise brief ... i dont need
+  everything to be a brief"). Do not ask again what the owner parked.
+- What does not fit the chat (eval scorecards, comparisons, system diagrams) goes on
+  the dashboard: `owner-dash --project <p> put report <name> <file>`, reposted on every
+  rerun (owner 2026-11-02). Post the result the owner reads, not working notes. The
+  dashboard renders CommonMark with tables only: no mermaid (owner 2026-11-09, on a
+  mermaid diagram: "it didnt render"); draw diagrams in ASCII inside a code block.
 
 For every requested item report actual checks, omissions, CI/conflicts,
 dependencies, named owner and next action. Missing proof stays visible; do not

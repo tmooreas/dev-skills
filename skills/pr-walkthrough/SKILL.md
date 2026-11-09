@@ -250,6 +250,8 @@ Check each item against the diff.
 ## Rules
 
 - Plain language; the owner should not need to decode.
+- Link a PR only by its changes page, `https://github.com/<owner>/<repo>/pull/N/changes`
+  (owner 2026-10-20), in the walkthrough and in chat.
 - No purple prose (owner 2026-11-02, on #372). Short declarative sentences, one fact
   each. Drop scene-setting, rhetorical framing ("the problem in miniature", "rest on"),
   stacked qualifiers, and sentences that chain three clauses with colons or semicolons.
