@@ -153,6 +153,17 @@ text when the runtime supports messages. Do not export unrelated/private payload
   that may still be live (two workers on one worktree corrupt it).
 - Every brief that commits states the commit identity (author and committer);
   rebases never run under a different repo-local user.
+- **Every implementer brief carries the project's pre-push checks**, run before each
+  push with their output in the result file (DPA: the `dpa-impl` agent's list). At
+  least: one issue or feature per PR (review-pr), within the project's size limit; the
+  project's comment rule, counted with `python3 tools/ccount.py <merge-base> HEAD`; a stacked
+  branch rebased onto its base's current head, keeping both behaviours; deliberate
+  stops as the project's typed refusal, with tests asserting its reason and facts, not
+  message text; each boundary (zero, negative, blank, NaN, missing, partial period,
+  explicit null vs omitted) run to its refusal or NA; each new test fails on the base
+  commit, checks a value worked out independently, and kills a mutant of the decision
+  it guards; review-pr's red flags (no parsers, no shims); the real smoke at the
+  pushed head.
 - **Every handoff brief is approved by the owner before launch** (owner
   2026-10-06). Show the brief itself: the owner's words it serves, the existing
   code it extends or replaces (file:line), the concrete design, what is out of
@@ -272,6 +283,13 @@ A synthetic boundary scenario must be labeled as such, not a real future event.
   Mechanical docs/baseline integration gets a scoped final-head check, not an
   unreviewed exemption or repeated whole audit. Runtime conflict resolution needs
   substantive re-review. Never apply labels or narrow tests merely to suppress CI.
+- **Which findings become fixes** (owner 2026-11-02, DPA: "some of those serious bugs
+  are quite outlandish"): before a finding becomes a fix, try its trigger on real data
+  and ordinary workflows and class it SEEN, LIKELY or CONTRIVED (review-pr). SEEN and
+  LIKELY are fixed. CONTRIVED goes on the backlog, unless it sits in code the PR itself
+  adds: that is fixed in the PR (DPA #505: unknown-cost rows that cancel). Never call a
+  finding serious from a hand-built repro alone. A finding that is a different defect
+  from the PR's issue is its own PR (review-pr).
 
 ## Handoffs and mechanical git
 

@@ -97,6 +97,11 @@ help without paying for a model call. A loading skill is not automated enforceme
 of its prose rules; runtime permission controls, project CI and merge hooks remain
 separate. Respect project resource limits and explicit cost/telemetry deferrals.
 
+`python3 tools/ccount.py BASE HEAD`, run inside the watched repository, prints the `#`
+comment lines and docstring lines of each changed `.py` file at BASE and at HEAD, then
+`TOTAL comments a -> b  docstring lines c -> d  net N`. Projects with a comment rule
+(e.g. DPA: net < 0 per PR) read the net.
+
 ## Origins and maintenance
 
 Initial publication, 2026-10-05:
