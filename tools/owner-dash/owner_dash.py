@@ -69,12 +69,12 @@ def put(args):
     body = re.sub(r"\A\s*\*Posted [^*\n]*\*\s*", "", text)
     path.write_text(f"*Posted {stamp}*\n\n{body.strip()}\n", encoding="utf-8")
     print(path)
+    folder = path.with_suffix(".files")
+    for item in args.attach:
+        folder.mkdir(exist_ok=True)
+        if Path(item).resolve() != (folder / Path(item).name).resolve():
+            shutil.copy2(item, folder / Path(item).name)
     if args.kind == "walkthrough":
-        folder = path.with_suffix(".files")
-        for item in args.attach:
-            folder.mkdir(exist_ok=True)
-            if Path(item).resolve() != (folder / Path(item).name).resolve():
-                shutil.copy2(item, folder / Path(item).name)
         if fetch_diff(args):
             missing, report = coverage_report(path)
             print(report, file=sys.stderr)
@@ -579,7 +579,7 @@ def walkthrough_html(path):
 
 def file_url(item):
     project = item.parent.parent.parent.name
-    return f"/{project}/walkthroughs/{quote(item.parent.name)}/{quote(item.name)}"
+    return f"/{project}/{item.parent.parent.name}/{quote(item.parent.name)}/{quote(item.name)}"
 
 
 def link_files(path, body):
@@ -1025,12 +1025,12 @@ class Handler(BaseHTTPRequestHandler):
             if done:
                 body += f"<details class=dx><summary>Merged or closed ({len(done)})</summary><ul>{items(done)}</ul></details>"
             return self.send(page(project, parts[1], body))
-        if len(parts) == 4 and parts[1] == "walkthroughs" and parts[2].endswith(".files"):
+        if len(parts) == 4 and parts[2].endswith(".files"):
             return self.send_file(folder / parts[2] / parts[3])
         path = folder / parts[2]
         if len(parts) != 3 or not path.is_file():
             return self.send(page(project, "Not found", "<p>Not found.</p>"), 404)
-        body = render_walkthrough(path)[0] if parts[1] == "walkthroughs" else render(path.read_text(encoding="utf-8"))
+        body = render_walkthrough(path)[0] if parts[1] == "walkthroughs" else link_files(path, render(path.read_text(encoding="utf-8")))
         if parts[1] in ("walkthroughs", "briefs"):
             body = approval_html(path) + body
         self.send(page(project, path.stem, body))
