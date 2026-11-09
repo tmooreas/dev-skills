@@ -65,7 +65,9 @@ score first. Every PR waiting on the owner is in it: no second "also ready" tabl
 Stacking shows in "(on #N)" and dependence. An approved PR leaves the table (owner
 2026-11-09, "theyre beyond me so dont need to be there anymore"). One line above the
 table, "Approved, merging (nothing needed from you)", lists them in merge order with
-what each waits on. A PR that needs a re-look after a rebase goes back into the table.
+what each waits on. A PR that needs a re-look after a rebase goes back into the table
+only once it is ready to act on; a PR the owner should not act on yet never sits in the
+table (owner 2026-11-09, "dont put it where stuff im supposed to approve goes").
 The tracker merges in that order; an approved PR waits behind an unapproved one it
 conflicts with or depends on.
 
