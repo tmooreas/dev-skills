@@ -39,7 +39,9 @@ score = importance² × frees × clarity / (size × blast × dependence)
 ```
 
 Score each factor from the PR's diff, body and review verdict. Be consistent
-across the table; the point is the order, not the number.
+across the table; the point is the order, not the number. Never work the number out by
+hand: write the factors, then compute every Score cell with code (owner 2026-11-09, the
+hand-worked scores were wrong).
 
 | Factor | 1 | 2 | 3 |
 |---|---|---|---|
