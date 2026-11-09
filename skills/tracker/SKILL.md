@@ -170,7 +170,8 @@ text when the runtime supports messages. Do not export unrelated/private payload
 - **Exempt from approval** (owner 2026-10-07): mechanical git with no behaviour
   change (rebases, restacks, their scoped checks, pushes of approved work,
   retargets, CI reruns, closing what the owner already dropped). Do it and report;
-  ask only when a conflict needs a behaviour choice. A cheaper model may execute it
+  ask only when a conflict needs a behaviour choice. Whether a PR approval survives
+  it is decided under "Owner approvals". A cheaper model may execute it
   and hands back to an implementer when a conflict touches logic or tests.
 - **Smoke before the owner sees it** (owner 2026-10-07): before calling a PR
   ready, the orchestrator runs the changed behaviour on the exact head through
@@ -286,6 +287,42 @@ launch agents, change authority or grant PR PASS. Surface every concern with its
 resolution/status, including withdrawn claims; disclose its evidence limits.
 An exhausted audit is incomplete even if partial feedback was recovered. No
 automatic audit retry. Audit work counts toward the model concurrency limit.
+
+## Owner approvals
+
+The owner approves on the owner dashboard (`bin/owner-dash`, see the README) or in
+chat. Run `owner-dash --project <p> approvals` before every launch and every merge,
+and ledger every approval you act on.
+
+- **New work needs an approved brief or a chat "yes"** to the stated change. Post each
+  brief with `owner-dash --project <p> put brief <name> <file>` when it is first shown
+  and again on every change (owner 2026-11-02); its first line under the title states
+  awaiting approval, approved (date) or done (PR links). Record a chat approval at once
+  with `owner-dash --project <p> record approve brief <name>` (or `pr <N>`), so the
+  page agrees. A brief approval approves the scope, never a PR (owner 2026-11-06).
+- **A PR approval holds at one exact head** (`approvals` shows it as `current`). Ask
+  for it only after a full pr-walkthrough of that head (owner 2026-10-08). Once given,
+  merge when the gate passes; do not ask again.
+- **After a rebase or merge from main** the approval carries only when a machine diff
+  proves nothing was added: `git range-diff` shows every commit `=`, or the diff of the
+  PR's own diff only removes lines (owner 2026-11-05). Merge through the gate and send
+  a one-line note. A hand-resolved conflict, or any added or changed line, needs a new
+  approval: show those lines to the owner as before/after text, or as a delta
+  walkthrough (e.g. DPA #507: one hand-merged paragraph).
+- **An approved PR gets no new commits** beyond that carry-over. A follow-up change,
+  even one the owner asks for while approving, is its own PR, stacked if it needs the
+  first (e.g. DPA #503 approved, its relabel became #518).
+- **Watch for approvals without being asked** (owner 2026-11-02): keep a background job
+  that exits when `approvals.jsonl` gains a row and prints the new rows. Act on each (a
+  PR approved at `current`: run the merge gate; a brief: launch it), then start the
+  watcher again. One shape:
+
+  ```sh
+  F=~/.local/share/owner-dash/<p>/approvals.jsonl; n=$(wc -l < "$F")
+  while [ "$(wc -l < "$F")" -le "$n" ]; do sleep 10; done; sleep 60; tail -n +$((n+1)) "$F"
+  ```
+
+  The final sleep collects a burst of clicks into one wake-up.
 
 ## Reporting and merge queue
 
