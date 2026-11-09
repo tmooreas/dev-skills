@@ -121,6 +121,16 @@ Added 2026-10-08:
   It adds to the portable skill and never forks it: change the shared method in
   `SKILL.md` and project specifics in the adapter.
 
+Added 2026-11-09, from orchestrating Datapack Agent (owner: "update the dev skills repo
+with our new stuff"):
+- Tracker: the worklist; routing work by kind (cheaper model for fixed-spec mechanical
+  work, strongest for design, another model family for review); shared-machine memory
+  discipline; owner approvals at one head with range-diff carry-over; the ordered merge
+  gate with the local suite contract; implementer pre-push checks; which findings
+  become fixes; talking to the owner.
+- Pr-walkthrough: LibreOffice render rules. Pr-matrix: decision, parked, in-progress and
+  merged-today sections. `tools/ccount.py` counts comment and docstring lines.
+
 The shared versions retain those methods but resolve repository-specific commands,
 paths, issue IDs, numeric limits and production policies from the target project.
 They do not export tracker state, transcripts, credentials or cached dependencies.

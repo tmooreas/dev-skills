@@ -460,5 +460,5 @@ for drift each run (rules here it contradicts without saying so, commands that n
 longer exist) and report drift in one line. Generic improvements go in this file,
 never in an adapter.
 
-Updated 2026-10-05: provider-neutral bounded CLI orchestration, context discipline,
-PASS-only owner queue, independent delta audits and delegated mechanical git.
+Updated 2026-11-09: worklist, routing by kind of work, shared-machine memory, owner
+approvals, the ordered merge gate and talking to the owner, from the DPA orchestration.
