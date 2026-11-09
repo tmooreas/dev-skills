@@ -6,9 +6,7 @@ generic skill only with the owner's say-so.
 
 ## Bounds and models
 
-- **One model job at a time** (owner 2026-10-09: "further optimize usage and minimize
-  threads"; overrides the earlier three). Queue the next job behind the running one.
-  The orchestrator does small mechanical work (merges after gates, pushes, short
+- The orchestrator does small mechanical work (merges after gates, pushes, short
   checks) itself instead of launching a worker. Reviews after a fix are scoped deltas,
   never a full re-review. Resume an existing session rather than start a fresh one
   when the context is still relevant.
@@ -30,9 +28,7 @@ generic skill only with the owner's say-so.
 
 /tmp is a 7.7 GB RAM disk on this machine, shared with the esr project's agents. Scratch worktrees, venvs, temp deal copies and pytest's basetemp go under `~/scratch` (launch workers with `TMPDIR=~/scratch/tmp`), never /tmp. pytest runs with `-n 4` at most, never `-n auto`. Load one large workbook at a time. Smokes copy deals to `~/scratch`, not `/tmp`.
 
-Agents share this machine with the orchestrator's local test suites. To stop a process, kill only the PIDs you started; never pattern kills (`pkill -f pytest`, `killall python`). On 2026-10-29 one such kill stopped two merge-gate suites mid-run.
-
-Dispatch by measured headroom, not a fixed agent count (owner 2026-11-05). Before each spawn, run `owner-dash --project datapack-agent approvals` and confirm the lane's brief is approved (new work and bug fixes alike; only reviews and mechanical git work on approved work are exempt; owner 2026-11-06), then read `free -g` (available) and weigh the job: read-only, review-of-text and mechanical git lanes are light (under 1 GB); a lane that builds, ingests or recalculates a real deal is heavy (several GB, through `~/scratch/bigjob`, one slot per lane); Excel is one at a time behind the lock. Start light lanes while available memory stays above about 4 GB; start a heavy lane only when its expected size fits above that margin.
+Headroom numbers for the skill's "Shared machine" (owner 2026-11-05). Before each spawn, run `owner-dash --project datapack-agent approvals` and confirm the lane's brief is approved (new work and bug fixes alike; only reviews and mechanical git work on approved work are exempt; owner 2026-11-06), then read `free -g` (available) and weigh the job: read-only, review-of-text and mechanical git lanes are light (under 1 GB); a lane that builds, ingests or recalculates a real deal is heavy (several GB, through `~/scratch/bigjob`: two slots, starts while 6 GB is free; one slot per lane); Excel is one at a time behind the lock. Start light lanes while available memory stays above about 4 GB; start a heavy lane only when its expected size fits above that margin. Small deals (under 3 GB) may skip bigjob while 6 GB is free, under `prlimit --as=6000000000` with `MALLOC_ARENA_MAX=2` (2026-11-09); MacQueen, Aegis and Pave stay on bigjob.
 
 ## Launch recipe
 

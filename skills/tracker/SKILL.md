@@ -136,7 +136,8 @@ text when the runtime supports messages. Do not export unrelated/private payload
 - Default maximum **two simultaneous model jobs**, including implementers,
   reviewers, meta-auditors and mechanical executors. Tool-only/CI watchers do not
   count. No worker starts nested agents or model calls. Change bounds only with
-  explicit task authority.
+  explicit task authority; where the owner lifts the count, dispatch by measured
+  headroom ("Shared machine").
 - Define role, input/read set, allowed writes, exact checkout/head, observable
   acceptance, wall-time limit, output path and stop behavior before launch.
   Model budget flags are request-stop thresholds, not exact billing ceilings.
@@ -188,6 +189,33 @@ text when the runtime supports messages. Do not export unrelated/private payload
   At a limit, preserve evidence and mark unfinished review NOT_REVIEWED. No
   automatic exhausted-run retry or full re-review of unchanged evidence. A later
   explicitly authorized delta check must state what new evidence it covers.
+
+## Shared machine
+
+Lanes, test suites and other projects' agents share one machine's memory (DPA: a WSL
+box that crashed out of memory on 2026-10-08).
+
+- **Dispatch by measured headroom and job weight**, not a fixed count (owner 2026-11-05:
+  "you as the dispatcher should be intelligently checking memory etc and dispatching if
+  theres space ... discern based on agent weight"). Read available memory before each
+  launch. Review, text and mechanical lanes are light; builds, ingests and real-data
+  runs are heavy. The project adapter gives the sizes and the margin.
+- **Heavy runs go through a lock wrapper** that holds one of a few slots and starts the
+  command only while available memory is above a threshold (DPA `~/scratch/bigjob`:
+  two slots, 6 GB). One heavy run per lane at a time. Small runs may skip the lock when
+  memory allows, under `prlimit --as=<cap>` with `MALLOC_ARENA_MAX=2` (the suite
+  contract says why).
+- Temp files and worktrees go under a disk-backed scratch directory (`TMPDIR`), never a
+  RAM-disk /tmp; cap test workers.
+- **Stop only the PIDs you started.** Never pattern kills (`pkill -f pytest`,
+  `pkill -f soffice`, `killall python`): on DPA 2026-10-29 one stopped two merge-gate
+  suites.
+- **Checkpoint every lane before a planned restart** (DPA 2026-11-09: a WSL shutdown to
+  compact its disk). Each lane commits locally (pushing drafts it may push) and writes a
+  RESUME section in its result file: branch, head, worktree, done, left, the next
+  command. The orchestrator ledgers a RESUME entry: main's sha, lanes in flight,
+  approvals awaited, open owner questions, background jobs to restart. After boot,
+  restart the approval watcher first, then relaunch lanes from their RESUME sections.
 
 ## Context discipline
 
