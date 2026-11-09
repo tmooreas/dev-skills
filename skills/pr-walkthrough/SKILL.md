@@ -141,10 +141,14 @@ headings.
    attached file: in a copy, hide every other sheet and delete the `_xlnm.Print_*`
    defined names (deleting sheets breaks formulas; LibreOffice still exports a hidden
    sheet that has a print area: 731 pages on WV), then
-   `soffice --headless --convert-to pdf` (one at a time; parallel runs hang), find the
+   `soffice -env:UserInstallation=file://<your scratch>/lo-profile --headless --convert-to pdf`
+   (your own profile, one conversion at a time; parallel runs hang), find the
    tab's page with `pdftotext` (search a label on it), `pdftoppm -png -r 110 -f N -l N`,
    and crop to the cells. Formula view does not reach the PDF: to show formulas, add a
-   `FORMULATEXT` column in the copy and label it as added for the screenshot.
+   `FORMULATEXT` column in the copy and label it as added for the screenshot. Open and
+   look at every PNG before embedding it: it shows the named tab, the cells and the
+   change. To stop LibreOffice, kill only the PID you started, never `pkill -f soffice`:
+   other agents render at the same time (2026-11-09, #388).
 6. **What it removes or replaces:** old code deleted, old behaviour gone, migrated
    callers. Say if anything old is left behind and why.
 7. **Proof:** the review verdict (reviewer, head, PASS/BLOCKED), CI on this head, the

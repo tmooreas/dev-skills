@@ -81,7 +81,7 @@ deal's folder. No GitHub writes.
 
 ## Extra antipatterns
 
-- **New code comments:** owner position (`dev/DESIGN_agentic_practices.md` §7, §12): every PR must net REMOVE comments (owner 2026-10-26): `#` comments plus docstring lines, added minus removed, < 0 (base vs head, tokenize/ast). 0 is a defect to fix before the walkthrough, not "net zero, fine". Allowed only: constraint comments ("do not remove", an external constraint with proof). Everything else becomes a name, a test name or a line in a `dev/` design doc. Report the count in section 9 as a signed number for comments and docstrings separately.
+- **New code comments:** owner position (`dev/DESIGN_agentic_practices.md` §7, §12): every PR must net REMOVE comments (owner 2026-10-26): `#` comments plus docstring lines, added minus removed, < 0 (`python3 ~/dev-skills/tools/ccount.py BASE HEAD`). 0 is a defect to fix before the walkthrough, not "net zero, fine". Allowed only: constraint comments ("do not remove", an external constraint with proof). Everything else becomes a name, a test name or a line in a `dev/` design doc. Report the count in section 9 as a signed number for comments and docstrings separately.
   Exempt (owner 2026-11-05): a PR that changes no code file reports "comments 0 (no code)".
 
 - **Proof on clean synthetic data only:** NovaTech has calendar years, monthly rows,
