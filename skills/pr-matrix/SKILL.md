@@ -77,12 +77,23 @@ above it that it conflicts with or depends on.
 
 Under the table:
 
-1. **Merge order** for each stack or conflict chain, matching the table.
-2. **Not in the matrix:** PR, what it waits on.
-3. **Known conflicts** between ranked PRs, and which one has to fix it when it
+1. **Your decisions, in order:** the owner's open questions from the tracker's worklist,
+   one line each, short ones to answer in chat, bigger ones as briefs (owner 2026-11-09:
+   "keep the decisions flowing to me").
+2. **Parked by you:** what the owner parked; it is not asked again.
+3. **In progress (no decision needed):** the worklist items lanes are working on, in
+   plain words.
+4. **Merge order** for each stack or conflict chain, matching the table.
+5. **Not in the matrix:** PR, what it waits on.
+6. **Known conflicts** between ranked PRs, and which one has to fix it when it
    lands second.
+7. **Merged today:** each PR linked, with a few words on what it did.
 
 Read-only toward the repository. Approvals and merges go through the tracker's merge gate.
 After sending, post the same text with
 `<repo>/bin/owner-dash --project <repository-name> put matrix -`; the owner reads it at
-`http://localhost:8765`.
+`http://localhost:8765`. Repost it whenever a PR becomes ready for approval, is approved,
+merges or goes on hold, in the same turn as the chat update (owner 2026-10-29: "this is
+the new system"). Every PR with a posted walkthrough sits in a table row, even while it
+finishes checks, with its status in the row: the dash attaches walkthroughs to table rows
+only (owner 2026-10-29: "368 is not on the dash yet").

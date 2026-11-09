@@ -42,12 +42,15 @@ A skill invocation is not approval of any PR or a production action.
 - One irreversible action per tool call. Approval of a stack tip does not
   approve its dependencies; merge is not deploy.
 
-## Scope and work stack
+## Scope and worklist
 
 1. Record every requested PR/task separately, latest priority overrides,
-   acceptance criteria, owner approvals and deferrals. Keep one work stack;
-   finish the current item or explicitly block it, then advance. A new message
-   does not erase outstanding work; an explicit priority override takes effect.
+   acceptance criteria, owner approvals and deferrals. Keep one **worklist** (owner
+   2026-11-06: "work linearly and keep a worklist when i give u more"): the owner's
+   asks in arrival order, kept in the runtime's todo list and the ledger. Append each
+   new ask; finish the current item or explicitly block it, then advance. A new message
+   does not erase outstanding work; an explicit priority override takes effect. The
+   owner sees it on the matrix page as "Your decisions" and "In progress" (pr-matrix).
 2. Read the project's definition of done and plan of record when applicable.
    Dated measurements are history, not current review or deployment authority.
    A stage-only PR is not a finished customer feature; manual review rules are
