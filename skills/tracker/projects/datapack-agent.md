@@ -56,8 +56,10 @@ The generic skill's brief approval, mechanical-git exemption, smoke-before-owner
 owner-approval rules apply. Here:
 - The smoke runs the real runners (`run_ingestion.py`, ideation, `run_excel_build.py`)
   on a copy of a deal under `~/scratch` with `~/dpa/venv312`, never in `Deals/` or /tmp.
-- Merges need the owner naming the PR; the executor rechecks head, base, CI and
-  mergeability immediately before merging.
+- Merge gate commands: `setsid nohup ~/dpa-lanes/local_suite_v2.sh N SHA > suiteN.log`
+  (results under `~/dpa-lanes/local_suite/pr<N>-<sha8>/`; owner 2026-10-27: the local suite
+  is a gate); COM tests from a C: copy when the PR touches Excel COM code. PRs stay draft
+  until the merge; retarget stacked PRs through the API (`gh pr edit` fails on this repo).
 - **Standing approval for run_cut slices** (owner 2026-10-08: "all these run cut ones are basically the same and i think we have the right scheme here so as long as there no scope creep i feel good about them"): a brief for a run_cut slice that follows the approved scheme (typed request validated against the cut's definition; keys as JSON objects of declared fields; layout emits key + cell kind; answers.py / run_cut.py reused; refusals with declared reasons; provisional before CP1) launches without asking. Anything beyond that scheme, or any scope creep, goes back to the owner. Merges still follow the walkthrough rule.
 - Every walkthrough links only the PR's changes page: [#N](https://github.com/American-Securities/datapack-agent/pull/N/changes) (owner 2026-10-20).
 - Markdown edits (FEATURE_MAP, SKILL, references, docs) change only the words that must change, in place: never rewrite, reword or reflow a line or paragraph wholesale, so the owner's diff shows just the change (owner 2026-10-22). Every brief carries this rule.

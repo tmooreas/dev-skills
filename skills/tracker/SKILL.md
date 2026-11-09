@@ -348,6 +348,41 @@ report the holds without launching a no-op agent. Deployment remains a separate
 explicit action. Manual orchestration discipline is not an implemented automated
 QA/merge gate; describe enforcement gaps honestly.
 
+**The merge gate**, per PR, in this order; stop at the first failure:
+
+1. Owner approval at the head about to merge (`approvals` shows `current`).
+2. The project's local full suite on that head merged with current main, where the
+   project has one (contract below).
+3. Overlap: compare the files changed on main since the suite's merge base with the
+   PR's files. Any overlap means rerunning the overlapping tests on the new merge: a
+   clean merge is not a working one (DPA 2026-10-29: two PRs merged clean, and the
+   suite caught a NameError).
+4. Required CI green at that exact head.
+5. `git merge-tree --write-tree origin/main <head>` reports no conflict.
+6. Merge by REST with the head pinned. Re-read the PR head first and stop with
+   HEADMOVED if it is not the approved sha; then
+   `gh api -X PUT repos/<owner>/<repo>/pulls/<N>/merge -f sha=<full sha> -f merge_method=merge`,
+   which GitHub refuses if the head moved meanwhile. Mark a draft ready first.
+7. After the merge: ledger it; repost the matrix; retarget PRs stacked on it to its
+   base; run merge-tree for every open PR against the new main and send each new
+   conflict to its lane; tell the owner what merged and what is next.
+
+Merge top-down in matrix order (pr-matrix).
+
+**Local full suite contract** (DPA's `local_suite_v2.sh PR SHA` is one implementation):
+- a fresh detached worktree of the head, merged with origin/main; a merge conflict
+  exits before any test runs;
+- every test file in its own process under an address-space cap (`prlimit --as`), with
+  `MALLOC_ARENA_MAX=2`: glibc reserves an arena per thread and the reservations count
+  against the cap, so without it a process under 1 GB resident fails with MemoryError,
+  cannot start threads, or hangs;
+- longest files first, by the durations of the previous run;
+- parallel lanes sized by free memory (DPA: three, a fourth only while 6 GB is free);
+- per file: log, exit code, and peak resident memory (`/usr/bin/time -f %M`);
+- failures rerun alone without the cap; a resume flag skips files already done;
+- done means a final line with one result per test file and an empty list of reruns
+  that still fail. A file that failed first and passed alone is reported as a flake.
+
 ## Maintaining this skill
 
 Keep reusable policy here and runtime details in the adapter. Keep existing
