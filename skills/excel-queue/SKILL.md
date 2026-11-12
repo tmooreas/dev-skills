@@ -50,9 +50,9 @@ held, its purpose) and each session waiting, in order.
   The command must not return before its Excel has quit (no detached `Start-Process`).
 - Never start Excel outside a turn.
 - Never edit or delete anything in the queue folder, `C:\ProgramData\excel-queue`
-  (`/mnt/c/ProgramData/excel-queue` from WSL). The script keeps it: a stale holder or
-  ticket is cleared by the next in line, and a broken lock is kept as `stale-<utc>-<id>/`
-  with a line in `queue.log`.
+  (`/mnt/c/ProgramData/excel-queue` from WSL). The script keeps it: any waiter removes a
+  ticket whose heartbeat is confirmed stopped, only the first in line breaks a stale lock,
+  and a broken lock is kept as `stale-<utc>-<id>/` with a line in `queue.log`.
 - To clear a lock by hand, use only `release --stale-only`: it breaks a lock only when
   its holder has been silent for 10 minutes, never a live one.
 - Run the script from the dev-skills checkout; edit it only here, in this repository,

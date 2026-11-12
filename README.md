@@ -24,7 +24,7 @@ policy so CLI-specific details do not enter every task's context.
 git clone https://github.com/tmooreas/dev-skills.git
 cd dev-skills
 mkdir -p "$HOME/.agents/skills"
-for skill in tracker review-pr issue-queue pr-walkthrough; do
+for skill in tracker review-pr issue-queue pr-walkthrough excel-queue; do
   target="$HOME/.agents/skills/$skill"
   if [ -e "$target" ] || [ -L "$target" ]; then
     printf 'Already exists; reconcile before linking: %s\n' "$target" >&2

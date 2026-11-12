@@ -149,6 +149,29 @@ class QueueTest(unittest.TestCase):
     def cleared(self) -> bool:
         return not (self.queue / "lock").exists() and list((self.queue / "tickets").iterdir()) == []
 
+    def test_a_waiter_that_waits_past_the_stale_limit_keeps_its_ticket_fresh(self):
+        """A session waiting longer than the stale limit refreshes its own ticket, so its heartbeat never reads stale
+        and nobody removes it: its age, sampled throughout the wait, stays under the limit, and it is served."""
+        self.tune(STALE_SECONDS=0.3, CONFIRM_POLLS=10)
+        desk, holder, served = Desk(), threading.Event(), threading.Event()
+        served.set()
+        ages: list[float] = []
+        with contextlib.redirect_stderr(io.StringIO()):
+            desk.session("holder", holder)
+            eventually(lambda: desk.order == ["holder"])
+            desk.session("long wait", served)
+            eventually(lambda: in_line() == ["long wait"])
+            end = time.monotonic() + 1.0
+            while time.monotonic() < end:
+                ages += [t["age"] for t in Q.status()["queue"] if t.get("purpose") == "long wait"]
+                time.sleep(0.01)
+            holder.set()
+            desk.finish()
+        self.assertTrue(ages)
+        self.assertLess(max(ages), 0.3)
+        self.assertEqual((desk.order, desk.errors, (self.queue / "queue.log").exists()),
+                         (["holder", "long wait"], [], False))
+
     def test_a_second_session_waits_until_the_first_gives_excel_back(self):
         desk, first, second = Desk(), threading.Event(), threading.Event()
         err = io.StringIO()
@@ -315,11 +338,13 @@ class QueueTest(unittest.TestCase):
     def test_release_stale_only_breaks_only_a_stale_lock(self):
         for stale in (True, False):
             with self.subTest(stale=stale):
-                lock = ghost_holder(self.queue, "crashed run", heartbeat_ago=601 if stale else 540)
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                    code = Q.main(["release", "--stale-only"])
-                self.assertEqual((code, lock.exists(), len(list(self.queue.glob("stale-*")))),
-                                 (0, False, 1) if stale else (1, True, 1))
+                root = self.tmp / f"case-{stale}"
+                with mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(root)}):
+                    lock = ghost_holder(root, "crashed run", heartbeat_ago=601 if stale else 540)
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        code = Q.main(["release", "--stale-only"])
+                self.assertEqual((code, lock.exists(), len(list(root.glob("stale-*")))),
+                                 (0, False, 1) if stale else (1, True, 0))
 
     def test_status_lists_the_holder_and_the_line(self):
         desk, held, waits = Desk(), threading.Event(), threading.Event()
