@@ -83,6 +83,7 @@ deal's folder. No GitHub writes.
 
 - **New code comments:** owner position (`dev/DESIGN_agentic_practices.md` §7, §12): every PR must net REMOVE comments (owner 2026-10-26): `#` comments plus docstring lines, added minus removed, < 0 (`python3 ~/dev-skills/tools/ccount.py BASE HEAD`). 0 is a defect to fix before the walkthrough, not "net zero, fine". Allowed only: constraint comments ("do not remove", an external constraint with proof). Everything else becomes a name, a test name or a line in a `dev/` design doc. Report the count in section 9 as a signed number for comments and docstrings separately.
   Exempt (owner 2026-11-05): a PR that changes no code file reports "comments 0 (no code)".
+  Exempt (owner 2026-11-12): when the files a PR touches hold no comments or docstrings left to remove and the PR adds none, it reports "comments 0 (touched files have none)"; never edit an untouched file to get below zero.
 
 - **Proof on clean synthetic data only:** NovaTech has calendar years, monthly rows,
   January customer starts, no missing values. A change touching periods, fiscal years,

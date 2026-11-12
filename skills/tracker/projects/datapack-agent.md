@@ -81,6 +81,7 @@ owner-approval rules apply. Here:
 - No new code comments (owner, DESIGN_agentic_practices §7/§12): every PR must NET REMOVE comments (owner 2026-10-26): `#` comment lines plus docstring lines, added minus removed, must be < 0 per PR, not merely ≤ 0, as `python3 ~/dev-skills/tools/ccount.py $(git merge-base HEAD origin/<base>) HEAD` counts them. A PR at exactly 0 is a defect: delete stale or non-constraint comments in the touched files until the count is negative. Only constraint comments survive. Every brief says so; every result reports the count; every walkthrough states it plainly (e.g. "comments −3"), never "net zero".
   Owner (2026-10-20): a comment or docstring the change touches or makes stale is DELETED, never rewritten into a "correct version". Pre-checks flag any rewritten comment as a defect.
   Owner (2026-11-05): a PR that changes no code file (docs, SKILL/reference text, CONTRIBUTING only) is exempt; it reports "comments 0 (no code)".
+  Owner (2026-11-12): also exempt when the touched files hold no comments or docstrings left to remove and the PR adds none; it reports "comments 0 (touched files have none)". Never edit an untouched file to get below zero.
 
 - Reuse inventory BEFORE writing each new function, constant, list or writer (CLAUDE.md,
   CONTRIBUTING "Reuse first"): `python dev/tools/inventory.py --grep <word>` over the
