@@ -104,3 +104,7 @@ merges or goes on hold, in the same turn as the chat update (owner 2026-10-29: "
 the new system"). Every PR with a posted walkthrough sits in a table row, even while it
 finishes checks, with its status in the row: the dash attaches walkthroughs to table rows
 only (owner 2026-10-29: "368 is not on the dash yet").
+`bin/dash_matrix.py` edits a posted matrix in place: `put` renumbers the rows, refuses a
+score-order break (rows whose text says `at the bottom (your call)` sit last by the owner's
+choice), and reposts; `relook N SECTION0_FILE BASE` prepends a section 0 to a posted
+walkthrough and reposts it with its attachments. One PR per row (owner 2026-11-11).
