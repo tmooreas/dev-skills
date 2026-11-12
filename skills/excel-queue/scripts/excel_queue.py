@@ -1,4 +1,3 @@
-"""The machine-wide Excel queue. SKILL.md (skills/excel-queue in dev-skills) says how to use it and how it works."""
 from __future__ import annotations
 
 import argparse
@@ -23,7 +22,6 @@ HEARTBEAT_SECONDS = 30.0
 STALE_SECONDS = 600.0
 POLL_SECONDS = 1.0
 CONFIRM_POLLS = 90
-RECOVERY_STALE_SECONDS = 60.0
 EXCEL_RECHECK_SECONDS = 30.0
 QUERY_SECONDS = 20.0
 GRACE_SECONDS = 30.0
@@ -96,7 +94,6 @@ def whoami() -> str:
 
 
 def retried(action: Callable[..., object], *paths: Path) -> bool:
-    """False when the file was already gone. Windows refuses to replace or delete a file another process has open."""
     for attempt in range(RETRIES):
         try:
             action(*paths)
@@ -135,7 +132,6 @@ def parse_time(stamp: object) -> float | None:
 
 
 def live_automation_excels() -> list[int]:
-    """PIDs of running EXCEL.EXE started by COM (/automation); raises ExcelQueryError when it cannot tell."""
     if sys.platform != "win32" and "microsoft" not in platform.uname().release.lower():
         raise ExcelQueryError(f"no Excel check on {sys.platform}: only Windows and WSL are supported")
     script = base64.b64encode(EXCEL_QUERY.encode("utf-16-le")).decode("ascii")
@@ -274,34 +270,48 @@ def confirmed_stale(observation: dict, seen: dict) -> bool:
     return count >= CONFIRM_POLLS
 
 
-def clear_dead_recovery(root: Path) -> None:
-    path = root / RECOVERY
-    record = read_json(path / BREAKER)
-    since = parse_time((record or {}).get("since"))
-    try:
-        since = path.stat().st_mtime if since is None else since
-    except OSError:
-        return
-    if time.time() - since <= RECOVERY_STALE_SECONDS:
-        return
-    tomb = root / f"recovery-dead-{stamp()}"
-    try:
-        os.rename(path, tomb)
-    except OSError:
-        return
-    if read_json(tomb / BREAKER) != record:
+class RecoveryWatch:
+    def __init__(self, root: Path):
+        self.root = root
+        self.seen: dict = {}
+        self.dead: dict | None = None
+
+    def poll(self) -> None:
+        path = self.root / RECOVERY
+        record = read_json(path / BREAKER)
         try:
-            os.rename(tomb, path)
+            changed = path.stat().st_mtime
         except OSError:
-            pass
-        return
-    note(root, f"broke the recovery step of {describe(record or {})}, begun {short_time((record or {}).get('since'))}"
-               f": its breaker stopped mid-step; kept as {tomb.name}")
+            self.seen.clear()
+            self.dead = None
+            return
+        step = {"stale": True, "record": record,
+                "seen": json.dumps(record, sort_keys=True) if record else f"changed {changed}"}
+        self.dead = step if confirmed_stale(step, self.seen) else None
+
+    def clear_dead(self) -> None:
+        dead, self.dead = self.dead, None
+        if dead is None:
+            return
+        tomb = self.root / f"recovery-dead-{stamp()}"
+        try:
+            os.rename(self.root / RECOVERY, tomb)
+        except OSError:
+            return
+        record = dead["record"]
+        if read_json(tomb / BREAKER) != record:
+            try:
+                os.rename(tomb, self.root / RECOVERY)
+            except OSError:
+                pass
+            return
+        note(self.root, f"broke the recovery step of {describe(record or {})}, begun "
+                        f"{short_time((record or {}).get('since'))}: unchanged for {CONFIRM_POLLS} polls, its breaker "
+                        f"stopped mid-step; kept as {tomb.name}")
 
 
 @contextmanager
-def recovery(root: Path, by: str) -> Iterator[bool]:
-    """The mutex around every destructive recovery step; yields False when another breaker is in one."""
+def recovery(root: Path, by: str, watch: RecoveryWatch) -> Iterator[bool]:
     path = root / RECOVERY
     mine = {"who": by, "host": socket.gethostname(), "pid": os.getpid(), "since": utc_now(), "id": uuid.uuid4().hex}
     try:
@@ -310,7 +320,7 @@ def recovery(root: Path, by: str) -> Iterator[bool]:
     except FileExistsError:
         entered = False
     if not entered:
-        clear_dead_recovery(root)
+        watch.clear_dead()
         yield False
         return
     try:
@@ -326,17 +336,20 @@ def recovery(root: Path, by: str) -> Iterator[bool]:
             retried(os.rmdir, path)
 
 
-def break_lock(root: Path, holder: dict, by: str) -> bool:
-    """RecoveryRefused while an automation Excel runs or the check fails."""
-    with recovery(root, by) as entered:
-        if not entered:
-            return False
-        current = read_holder(root)
-        if current is None or current["seen"] != holder["seen"]:
+def unchanged(root: Path, holder: dict) -> bool:
+    current = read_holder(root)
+    return current is not None and current["seen"] == holder["seen"]
+
+
+def break_lock(root: Path, holder: dict, by: str, watch: RecoveryWatch) -> bool:
+    with recovery(root, by, watch) as entered:
+        if not entered or not unchanged(root, holder):
             return False
         blocker = excel_blocker()
         if blocker:
             raise RecoveryRefused(blocker)
+        if not unchanged(root, holder):
+            return False
         kept = f"stale-{stamp()}"
         try:
             os.rename(root / LOCK, root / kept)
@@ -347,9 +360,9 @@ def break_lock(root: Path, holder: dict, by: str) -> bool:
     return True
 
 
-def remove_ticket(root: Path, ticket: dict, by: str) -> bool:
+def remove_ticket(root: Path, ticket: dict, by: str, watch: RecoveryWatch) -> bool:
     path = root / TICKETS / f"{ticket['ticket']}.json"
-    with recovery(root, by) as entered:
+    with recovery(root, by, watch) as entered:
         if not entered:
             return False
         current = read_ticket(path)
@@ -387,6 +400,7 @@ class Turn:
         self._watching: dict[str, dict] = {}
         self._refused: set[str] = set()
         self._excel_next = 0.0
+        self._recovery = RecoveryWatch(self.root)
 
     def expired(self) -> bool:
         return self.deadline is not None and time.monotonic() >= self.deadline
@@ -401,6 +415,7 @@ class Turn:
         while True:
             if self.cancelled is not None:
                 raise Cancelled(self.cancelled)
+            self._recovery.poll()
             holder, line = self._line()
             place = line.index(self.name) + 1
             held = (f"held by {describe(holder)} since {short_time(holder.get('started'))} for: "
@@ -448,7 +463,7 @@ class Turn:
         if time.monotonic() < self._excel_next:
             return False
         try:
-            return break_lock(self.root, holder, self.who)
+            return break_lock(self.root, holder, self.who, self._recovery)
         except RecoveryRefused as e:
             self._excel_next = time.monotonic() + EXCEL_RECHECK_SECONDS
             if holder["seen"] not in self._refused:
@@ -471,7 +486,8 @@ class Turn:
                 continue
             if name != self.name:
                 watching[name] = self._watching.get(name, {})
-                if confirmed_stale(ticket, watching[name]) and remove_ticket(self.root, ticket, self.who):
+                if confirmed_stale(ticket, watching[name]) and remove_ticket(self.root, ticket, self.who,
+                                                                             self._recovery):
                     continue
             line.append(name)
         self._watching = watching
@@ -624,7 +640,9 @@ def release_stale(root: Path | None = None) -> int:
     root = root or queue_dir()
     seen: dict = {}
     who = whoami()
+    watch = RecoveryWatch(root)
     while True:
+        watch.poll()
         holder = read_holder(root)
         if holder is None:
             print("excel-queue: nobody holds the lock; nothing to break.", flush=True)
@@ -638,7 +656,7 @@ def release_stale(root: Path | None = None) -> int:
                   flush=True)
         if confirmed_stale(holder, seen):
             try:
-                if break_lock(root, holder, who):
+                if break_lock(root, holder, who, watch):
                     return 0
             except RecoveryRefused as e:
                 note(root, refusal(holder, str(e)))

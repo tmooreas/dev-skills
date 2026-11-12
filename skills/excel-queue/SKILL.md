@@ -89,7 +89,9 @@ blocks recovery.
   is running, or when the check cannot run: recovery fails closed. The refusal is
   printed and logged once per holder per session.
 - Two breakers cannot displace a fresh holder: every break and every stale-ticket
-  removal runs inside the recovery mutex and re-checks the confirmed record there.
+  removal runs inside the recovery mutex and re-checks the confirmed record there, and a
+  lock break compares the record again after the Excel check, just before the rename.
+  No breaker's clock is trusted: a mutex is judged dead only by observation.
 - A timed-out wait never starts the command, even when the turn frees up just after the
   deadline.
 
@@ -119,10 +121,12 @@ to its own last heartbeat, one clock, so no skew.
 Recovery (breaking a lock, removing a stale ticket) is serialized by the recovery mutex:
 `os.mkdir(recovery/)` with the breaker's record in it. Inside it the breaker re-reads the
 record it confirmed, compares, checks for a running automation Excel (breaking a lock
-only), acts, and removes the mutex. A breaker that finds the mutex taken looks again on
-its next poll. A mutex older than 60 s by its own record is broken and logged, since its
-breaker died mid-step. Taking the lock stays a plain `mkdir`, so the lock path disappears
-only through its holder's release or a rename inside the mutex.
+only), compares again, acts, and removes the mutex. A breaker that finds the mutex taken
+looks again on its next poll. A mutex is broken (and logged) only after the observer has
+seen the same breaker record unchanged on 90 of its own polls in a row, the rule that
+confirms a stale heartbeat; the record's own time is shown, never trusted, so a breaker
+whose clock runs behind keeps its step. Taking the lock stays a plain `mkdir`, so the lock
+path disappears only through its holder's release or a rename inside the mutex.
 
 The Excel check is one PowerShell query, `Get-CimInstance Win32_Process -Filter
 "Name='EXCEL.EXE'" | Select ProcessId,CommandLine | ConvertTo-Json`, run as
@@ -150,12 +154,12 @@ thread joins the turn it is in; other threads count as other sessions.
 - SIGKILL of the wrapper cannot be handled: its job may keep running. The heartbeat then
   stops, and recovery refuses while an automation Excel lives.
 - The release of a holder already confirmed stale (silent over 10 minutes) is not inside
-  the mutex; if it released and someone took the lock during a breaker's step, that new
-  lock could be renamed.
+  the mutex. A lock released and taken again during a breaker's step is left alone
+  unless that happens between the breaker's last compare and its rename.
 - On Windows, the kill after the grace period ends only the direct child; the Excel
   check covers anything left.
-- The recovery mutex is itself broken after 60 s; a breaker paused that long mid-step
-  can collide with the next.
+- A breaker paused mid-step for 90 of an observer's polls loses its mutex; it then
+  breaks nothing unless the pause falls between its last compare and its rename.
 
 ## Verify
 

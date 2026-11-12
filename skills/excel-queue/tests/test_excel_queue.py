@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import json
 import os
@@ -17,9 +18,9 @@ from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parent / "scripts" / "excel_queue.py"
-sys.path.insert(0, str(SCRIPT.parent))
-
-import excel_queue as Q  # noqa: E402
+LOADING = importlib.util.spec_from_file_location("excel_queue", SCRIPT)
+Q = importlib.util.module_from_spec(LOADING)
+LOADING.loader.exec_module(Q)
 
 QUERY = Q.live_automation_excels
 RECORD_TIME = "%Y-%m-%dT%H:%M:%S.%fZ"
@@ -337,10 +338,11 @@ class QueueTest(unittest.TestCase):
         confirmed = Q.read_holder(self.queue)
         (lock / "holder.json").write_text(ghost("a later holder's ticket", "later run", heartbeat_ago=601))
         with contextlib.redirect_stderr(io.StringIO()):
-            self.assertIs(Q.break_lock(self.queue, confirmed, "tester"), False)
+            self.assertIs(Q.break_lock(self.queue, confirmed, "tester", Q.RecoveryWatch(self.queue)), False)
             self.assertEqual(json.loads((lock / "holder.json").read_text())["ticket"], "a later holder's ticket")
             self.assertEqual(list(self.queue.glob("stale-*")), [])
-            self.assertIs(Q.break_lock(self.queue, Q.read_holder(self.queue), "tester"), True)
+            self.assertIs(Q.break_lock(self.queue, Q.read_holder(self.queue), "tester", Q.RecoveryWatch(self.queue)),
+                          True)
         (kept,) = self.queue.glob("stale-*")
         self.assertEqual((lock.exists(), json.loads((kept / "holder.json").read_text())["purpose"]),
                          (False, "later run"))
@@ -554,7 +556,7 @@ class QueueTest(unittest.TestCase):
         fresh = Q.Turn("fresh holder", self.queue)
 
         def breaker(name):
-            results[name] = Q.break_lock(self.queue, confirmed, name)
+            results[name] = Q.break_lock(self.queue, confirmed, name, Q.RecoveryWatch(self.queue))
 
         def take():
             end = time.monotonic() + 10
@@ -574,7 +576,7 @@ class QueueTest(unittest.TestCase):
             resume.set()
             for thread in (first, taker):
                 thread.join(10)
-            self.assertIs(Q.break_lock(self.queue, confirmed, "third"), False)
+            self.assertIs(Q.break_lock(self.queue, confirmed, "third", Q.RecoveryWatch(self.queue)), False)
         try:
             self.assertEqual((results, calls), ({"first": True, "second": False}, ["first"]))
             self.assertEqual(json.loads((self.queue / "lock" / "holder.json").read_text())["ticket"], fresh.name)
@@ -584,25 +586,99 @@ class QueueTest(unittest.TestCase):
         finally:
             fresh.release()
 
-    def test_a_recovery_step_is_broken_only_once_its_breaker_is_a_minute_silent(self):
-        lock = ghost_holder(self.queue, "crashed run", heartbeat_ago=601)
-        step = self.queue / "recovery"
-        for since, broken in ((50, False), (61, True)):
-            with self.subTest(since=since):
-                step.mkdir(exist_ok=True)
-                (step / "breaker.json").write_text(json.dumps({"who": "dead breaker", "since": ago(since)}))
-                with contextlib.redirect_stderr(io.StringIO()):
-                    if broken:
+    def test_a_recovery_step_is_broken_only_once_seen_unchanged_for_the_confirmation_polls(self):
+        for state, since in (("live", 3600), ("dead", 1)):
+            with self.subTest(state=state):
+                root = self.tmp / f"case-{state}"
+                with mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(root)}), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    lock = ghost_holder(root, "crashed run", heartbeat_ago=601)
+                    step = root / "recovery"
+                    step.mkdir()
+                    record = json.dumps({"who": f"{state} breaker", "since": ago(since)})
+                    if state == "live":
+                        stop, thread = beating(step / "breaker.json", record)
+                        try:
+                            with self.assertRaises(Q.QueueTimeout):
+                                with Q.excel_turn("next run", timeout=0.3):
+                                    self.fail("broke a lock while another breaker was mid-step")
+                        finally:
+                            stop.set()
+                            thread.join(10)
+                    else:
+                        (step / "breaker.json").write_text(record)
                         with Q.excel_turn("next run", timeout=5):
                             self.assertEqual(Q.status()["holder"]["purpose"], "next run")
-                    else:
-                        with self.assertRaises(Q.QueueTimeout):
-                            with Q.excel_turn("next run", timeout=0.3):
-                                self.fail("broke a lock while another breaker was mid-step")
-                self.assertEqual((lock.exists(), step.exists()), (not broken, not broken))
-        log = (self.queue / "queue.log").read_text()
-        self.assertIn("broke the recovery step of dead breaker on ? (pid ?)", log)
-        self.assertEqual(len(list(self.queue.glob("recovery-dead-*"))), 1)
+                dead = state == "dead"
+                self.assertEqual((lock.exists(), step.exists(), len(list(root.glob("recovery-dead-*")))),
+                                 (not dead, not dead, int(dead)))
+                if dead:
+                    self.assertIn("broke the recovery step of dead breaker on ? (pid ?)",
+                                  (root / "queue.log").read_text())
+
+    def test_a_breaker_whose_clock_runs_behind_keeps_its_recovery_step(self):
+        ghost_holder(self.queue, "crashed run", heartbeat_ago=601)
+        confirmed = Q.read_holder(self.queue)
+        paused, resume = threading.Event(), threading.Event()
+        real_now = Q.utc_now
+
+        def now():
+            if threading.current_thread().name != "behind":
+                return real_now()
+            return (datetime.now(timezone.utc) - timedelta(seconds=70)).strftime(RECORD_TIME)
+
+        def slow_check():
+            if threading.current_thread().name == "behind":
+                paused.set()
+                resume.wait(10)
+            return []
+        results: dict = {"other": []}
+        fresh = Q.Turn("fresh holder", self.queue)
+
+        def behind():
+            results["behind"] = Q.break_lock(self.queue, confirmed, "behind", Q.RecoveryWatch(self.queue))
+        breaker = threading.Thread(target=behind, name="behind")
+        with contextlib.redirect_stderr(io.StringIO()), mock.patch.object(Q, "utc_now", now), \
+                mock.patch.object(Q, "live_automation_excels", slow_check):
+            breaker.start()
+            self.assertTrue(paused.wait(10))
+            watch = Q.RecoveryWatch(self.queue)
+            for _ in range(Q.CONFIRM_POLLS - 1):
+                watch.poll()
+                results["other"].append(Q.break_lock(self.queue, confirmed, "other", watch))
+                time.sleep(Q.POLL_SECONDS)
+            took_early = fresh._lock()
+            resume.set()
+            breaker.join(10)
+            took = took_early or fresh._lock()
+        try:
+            self.assertEqual((results, took_early, took),
+                             ({"other": [False] * (Q.CONFIRM_POLLS - 1), "behind": True}, False, True))
+            self.assertEqual(json.loads((self.queue / "lock" / "holder.json").read_text())["ticket"], fresh.name)
+            (kept,) = self.queue.glob("stale-*")
+            self.assertEqual(json.loads((kept / "holder.json").read_text())["purpose"], "crashed run")
+            self.assertEqual(list(self.queue.glob("recovery*")), [])
+        finally:
+            fresh.release()
+
+    def test_a_lock_replaced_during_the_excel_check_is_left_alone(self):
+        lock = ghost_holder(self.queue, "crashed run", heartbeat_ago=601)
+        confirmed = Q.read_holder(self.queue)
+        fresh = Q.Turn("fresh holder", self.queue)
+
+        def check():
+            (lock / "holder.json").unlink()
+            lock.rmdir()
+            self.assertTrue(fresh._lock())
+            return []
+        with contextlib.redirect_stderr(io.StringIO()), mock.patch.object(Q, "live_automation_excels", check):
+            result = Q.break_lock(self.queue, confirmed, "breaker", Q.RecoveryWatch(self.queue))
+        try:
+            self.assertIs(result, False)
+            self.assertEqual(json.loads((lock / "holder.json").read_text())["ticket"], fresh.name)
+            self.assertEqual(list(self.queue.glob("stale-*")), [])
+        finally:
+            fresh.release()
 
     def test_an_unusable_queue_folder_fails_loudly(self):
         real = os.mkdir
