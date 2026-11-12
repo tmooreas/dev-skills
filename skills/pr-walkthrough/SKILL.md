@@ -72,6 +72,13 @@ section still appears, and the coverage check still passes. Write each section h
 as a bold paragraph, `**N. Title**` as below; the coverage check does not find `##`
 headings.
 
+The walkthrough's first line, above section 1, is the PR's size in **code + skill lines**
+(added / deleted): hand-written product and tool source plus skill files (`SKILL.md`, adapters,
+skill scripts), not tests, fixtures, captured evidence, generated dumps, binaries or docs. It
+is the size that matters (owner 2026-11-12, "code + skill lines being the most important
+metric ... wkthrus should advertise that early"). Example: `Code + skill lines: +340 / -197
+(tests +620 / -380; everything else in section 11)`.
+
 1. **In one sentence:** what changes for the person running the pipeline or reading its
    output. No function names.
 2. **Why we need it:** the problem in the owner's terms, with the concrete incident (the
@@ -187,8 +194,9 @@ headings.
    piece that looks heavy, not a blanket answer.
 10. **Limits and follow-ups:** known gaps, what is deliberately out of scope, what comes
     next and in which PR.
-11. **Size and order:** changed lines vs the project's limit, what it is stacked on, what waits on it,
-    merge order.
+11. **Size and order:** a table of changed lines by kind (code, skill files, tests, fixtures,
+    captured evidence, generated dumps, binaries, docs), with code + skill lines first and
+    measured against the project's limit; what it is stacked on, what waits on it, merge order.
 12. **Ask:** the one decision you need, if any (approve the merge, or a choice), with
     your recommendation.
 
