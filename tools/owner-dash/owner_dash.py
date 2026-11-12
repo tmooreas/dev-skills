@@ -425,7 +425,7 @@ def hunks_for(span, files):
     found = []
     for f in files:
         path = Path(f["path"])
-        by_path = "/" in head or " " in head
+        by_path = "/" in head or " " in head or head == f["path"]
         if ("/" + f["path"]).endswith("/" + head) if by_path else path.stem in parts:
             words = [p for p in re.split(r"[./:()\s,]+", span[len(head):] if by_path else span) if p]
             names = [p for p in words if p not in path.parts and p not in (path.stem, path.suffix[1:]) and not p.isdigit()]
