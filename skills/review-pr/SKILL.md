@@ -262,6 +262,16 @@ architecture-fit answers beside the net-value call; don't hide findings in prose
 
 ## 7. Final verdict and exact-head gate
 
+Every verdict answers three questions first, each yes or no with its evidence
+(file:line, cell or brief line). Any yes blocks a PASS (owner 2026-11-12):
+
+1. **Is any number typed where it could be a formula back to the source rows?** A
+   value written as a constant into an output (a workbook cell, a deck figure, a
+   report total) that a formula or reference to the rows it came from could carry.
+2. **Is anything in the PR outside the approved brief or issue?** Name the brief;
+   each change either traces to a line of it or is outside it.
+3. **Does the PR fix more than one issue?** See the authority section's one-issue rule.
+
 Report exact head/base, implementer and reviewer identities, executed commands and
 results, runtime readback, mutations/probes, historical method, ranked findings
 with repros, notes, omissions and net value. One row per requested PR; an unrun
