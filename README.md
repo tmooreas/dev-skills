@@ -11,6 +11,7 @@ architecture contracts, priorities and production permissions.
 | [issue-queue](skills/issue-queue/SKILL.md) | Current-main backlog reconciliation, next-action sequencing and executed proof before issue closure. |
 | [pr-walkthrough](skills/pr-walkthrough/SKILL.md) | Owner-facing walkthrough of one PR at its current head: plain language, an ASCII flow diagram, code places, a worked example, proof, whether each test earns its place, and an antipattern check that stops on the first finding. Per-project adapters live in `skills/pr-walkthrough/projects/`. |
 | [pr-matrix](skills/pr-matrix/SKILL.md) | Ranks the PRs ready to merge so the owner approves the best ones first. |
+| [excel-queue](skills/excel-queue/SKILL.md) | One Excel automation at a time on the shared Windows desktop, in arrival order: wrap any Excel-COM job in its `run`; `status` shows who is using Excel. |
 
 ## Use
 
@@ -91,6 +92,13 @@ states. The policy is runtime-agnostic, not a claim that this legacy collector
 was rewritten. Its behavioral tests use temporary git fixtures and need no
 EarningsPulse checkout, GitHub credentials or model calls. The mutation harness
 removes its own temporary generated source.
+
+The Excel queue's tests are stdlib unittest; sessions are threads on a temporary queue
+folder, with no Excel and no Windows process:
+
+```sh
+python3 skills/excel-queue/tests/test_excel_queue.py
+```
 
 Verify skill edits with the installed runtime's loader/prompt builder and CLI
 help without paying for a model call. A loading skill is not automated enforcement
