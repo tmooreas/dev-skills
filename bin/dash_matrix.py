@@ -95,7 +95,10 @@ def relook(number, section0, base, project="datapack-agent"):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "put":
+    command = sys.argv[1:2]
+    if command == ["put"]:
         print(Matrix(*sys.argv[2:3]).put() or "posted")
-    elif sys.argv[1] == "relook":
+    elif command == ["relook"] and len(sys.argv) >= 5:
         print(relook(sys.argv[2], Path(sys.argv[3]).read_text(), sys.argv[4], *sys.argv[5:6]))
+    else:
+        sys.exit(__doc__)
