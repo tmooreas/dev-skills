@@ -111,4 +111,5 @@ owner-approval rules apply. Here:
 - Lanes, results and reviews: `/mnt/c/CodeProjects/_dpa_scratch/owner_review/lanes/<lane>/`.
 - Briefs and worker sessions: `~/dpa-lanes/` (not `/tmp`, which a reboot clears).
 
+- Excel/COM steps take a turn in the shared Excel queue (skill `excel-queue`; owner 2026-11-12): `python3 /mnt/c/CodeProjects/dev-skills/skills/excel-queue/scripts/excel_queue.py run --purpose "<lane: what>" -- <command>`; `status` shows the holder. Take the Excel turn outside any bigjob RAM slot.
 - Excel automation crashes leave ~1.4 GB full dumps in C:\Users\tmoore\AppData\Local\CrashDumps (policy keeps 10). After any Excel run, delete EXCEL.EXE.*.dmp there.
