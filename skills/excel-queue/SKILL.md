@@ -60,6 +60,13 @@ blocks recovery.
 
 - One turn for a whole Excel job, from starting Excel to quitting it, not one per call.
   The command must not return before its Excel has quit (no detached `Start-Process`).
+- A launcher that starts a detached Excel job and returns at once (esr's `esr-dev native
+  run`, a `Start-Process`) must hold the turn until the job has finished: wrap the launch
+  and the wait for its result together, e.g.
+  `excel_queue.py run --purpose "esr native <what>" -- bash -c 'id=$(esr-dev native run ... | <run id>) && esr-dev native wait "$id"'`.
+  The turn is held from WSL while the job runs on Windows. If the launching session
+  dies, its turn goes stale, but it is never broken while the job's automation Excel is
+  still running (owner 2026-11-12: esr itself does not take turns).
 - Never start Excel outside a turn.
 - Never edit or delete anything in the queue folder. The script keeps it: any waiter
   removes a ticket whose heartbeat is confirmed stopped, only the first in line breaks a
