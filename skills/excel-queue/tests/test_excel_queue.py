@@ -1,22 +1,10 @@
-"""The machine-wide Excel queue (scripts/excel_queue.py): one holder at a time, served in arrival order.
-
-Stdlib only: python3 skills/excel-queue/tests/test_excel_queue.py
-
-Each session is a thread on a queue folder in a temporary directory (EXCEL_QUEUE_DIR), polling every few
-milliseconds; only a nested turn in the same thread joins its turn, so threads stand for separate sessions. A Desk
-counts how many sessions hold Excel at once and the order they got it in, so a lock two sessions both win, or a
-turn out of order, fails a test. A crashed or skewed session is played by the file it leaves: a holder.json or a
-ticket whose heartbeat stopped, or keeps changing on a clock that runs behind, written out by hand. The script runs
-as another session runs it, `python3 excel_queue.py run -- <command>`, with a child Python as the command; no
-other process is started and no Excel is touched.
-"""
 from __future__ import annotations
 
 import contextlib
 import io
 import json
 import os
-import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -33,8 +21,27 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import excel_queue as Q  # noqa: E402
 
+QUERY = Q.live_automation_excels
 RECORD_TIME = "%Y-%m-%dT%H:%M:%S.%fZ"
 NAME_TIME = "%Y%m%dT%H%M%S.%fZ"
+GRANDCHILD = """
+import os, signal, sys, time
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+if sys.argv[2] == "slow":
+    signal.signal(signal.SIGTERM, lambda *_: (time.sleep(0.3), os._exit(0)))
+else:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+open(sys.argv[1] + ".grand.tmp", "w").write(str(os.getpid()))
+os.replace(sys.argv[1] + ".grand.tmp", sys.argv[1] + ".grand")
+while True:
+    time.sleep(0.05)
+"""
+JOB = f"""
+import os, subprocess, sys, time
+subprocess.Popen([sys.executable, "-c", {GRANDCHILD!r}, *sys.argv[1:]])
+open(sys.argv[1] + ".child", "w").write(str(os.getpid()))
+time.sleep(60)
+"""
 
 
 def eventually(condition, seconds: float = 10.0) -> None:
@@ -54,8 +61,6 @@ def ago(seconds: float, form: str = RECORD_TIME) -> str:
 
 
 def ghost(ticket: str, purpose: str, heartbeat_ago: float, held_minutes: float = 0) -> str:
-    """The record another session wrote, its last heartbeat `heartbeat_ago` seconds back, started `held_minutes`
-    before that."""
     beat, started = ago(heartbeat_ago), ago(heartbeat_ago + 60 * held_minutes)
     return json.dumps({"who": "ghost (WSL Ubuntu)", "host": "DESKTOP", "pid": 4242, "purpose": purpose,
                        "arrived": started, "started": started, "heartbeat": beat, "ticket": ticket})
@@ -69,8 +74,6 @@ def ghost_holder(root: Path, purpose: str, heartbeat_ago: float) -> Path:
 
 
 def beating(path: Path, record: str) -> tuple[threading.Event, threading.Thread]:
-    """A live writer on a clock that runs behind: it writes `record` (a heartbeat that always reads old) to `path`
-    now, then rewrites it every 5 ms, so the heartbeat keeps changing, until the event is set."""
     path.write_text(record)
     stop = threading.Event()
 
@@ -86,17 +89,28 @@ def beating(path: Path, record: str) -> tuple[threading.Event, threading.Thread]
 
 
 def child(code: int) -> list[str]:
-    """A child Python that exits `code` when the queue's holder is the turn of purpose 'probe', 99 otherwise."""
     check = ("import json, os, sys; "
              "path = os.path.join(os.environ['EXCEL_QUEUE_DIR'], 'lock', 'holder.json'); "
              f"sys.exit({code} if json.load(open(path))['purpose'] == 'probe' else 99)")
     return [sys.executable, "-c", check]
 
 
-class Desk:
-    """Sessions in threads. Each holds Excel until its event is set, then a moment longer, so two holding at once
-    would overlap; `most` is the most that ever held it at once, `order` the order they got it in."""
+def wrapper(*args: str, excels: str = "[]", grace: float = 30.0) -> list[str]:
+    launch = (f"import sys; sys.path.insert(0, {str(SCRIPT.parent)!r}); import excel_queue as Q; "
+              f"Q.live_automation_excels = lambda: {excels}; Q.GRACE_SECONDS = {grace}; "
+              f"sys.exit(Q.main(sys.argv[1:]))")
+    return [sys.executable, "-c", launch, *args]
 
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+class Desk:
     def __init__(self):
         self.guard = threading.Lock()
         self.holding = 0
@@ -138,7 +152,8 @@ class QueueTest(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(self.queue)})
         env.start()
         self.addCleanup(env.stop)
-        self.tune(POLL_SECONDS=0.005, HEARTBEAT_SECONDS=0.02, CONFIRM_POLLS=3)
+        self.tune(POLL_SECONDS=0.005, HEARTBEAT_SECONDS=0.02, CONFIRM_POLLS=3, EXCEL_RECHECK_SECONDS=0.0,
+                  live_automation_excels=lambda: [])
 
     def tune(self, **constants):
         for name, value in constants.items():
@@ -150,8 +165,6 @@ class QueueTest(unittest.TestCase):
         return not (self.queue / "lock").exists() and list((self.queue / "tickets").iterdir()) == []
 
     def test_a_waiter_that_waits_past_the_stale_limit_keeps_its_ticket_fresh(self):
-        """A session waiting longer than the stale limit refreshes its own ticket, so its heartbeat never reads stale
-        and nobody removes it: its age, sampled throughout the wait, stays under the limit, and it is served."""
         self.tune(STALE_SECONDS=0.3, CONFIRM_POLLS=10)
         desk, holder, served = Desk(), threading.Event(), threading.Event()
         served.set()
@@ -265,7 +278,6 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(list(self.queue.glob("stale-*")), [])
 
     def test_a_live_holder_whose_clock_runs_behind_is_never_broken(self):
-        """Its heartbeat always reads 11 minutes old, but it keeps changing, as a live holder's does."""
         self.tune(CONFIRM_POLLS=40)
         lock = self.queue / "lock"
         lock.mkdir(parents=True)
@@ -297,8 +309,6 @@ class QueueTest(unittest.TestCase):
                          (["long run", "next"], 1, [], []))
 
     def test_a_waiter_whose_clock_runs_behind_keeps_its_place_until_it_stops(self):
-        """Its ticket's heartbeat always reads 11 minutes old, but keeps changing while it lives, as a live waiter's
-        does on a clock 11 minutes behind; it arrived first, so it stays ahead until it really stops."""
         self.tune(CONFIRM_POLLS=40)
         tickets = self.queue / "tickets"
         tickets.mkdir(parents=True)
@@ -393,6 +403,220 @@ class QueueTest(unittest.TestCase):
                                   r"1 of 1$")
         self.assertTrue(gave_up.startswith("excel-queue: no turn within 0.5s, held by "))
         self.assertTrue(self.cleared())
+
+    def test_run_with_timeout_zero_takes_a_free_turn_at_once(self):
+        done = subprocess.run([sys.executable, str(SCRIPT), "run", "--timeout", "0", "--purpose", "probe", "--",
+                               *child(5)], capture_output=True, text=True, timeout=60)
+        self.assertEqual((done.returncode, self.cleared()), (5, True), done.stderr)
+
+    def test_a_turn_freed_after_the_deadline_is_not_taken(self):
+        marker = self.tmp / "ran"
+        holder = Q.Turn("a long recalc")
+        holder.take()
+        try:
+            waiter = subprocess.Popen([sys.executable, str(SCRIPT), "run", "--timeout", "0.3", "--", sys.executable,
+                                       "-c", f"open({str(marker)!r}, 'w')"], stderr=subprocess.PIPE, text=True)
+            eventually(lambda: len(in_line()) == 1)
+            time.sleep(0.5)
+        finally:
+            holder.release()
+        _, err = waiter.communicate(timeout=60)
+        self.assertEqual((waiter.returncode, marker.exists()), (Q.TIMEOUT_EXIT, False), err)
+        self.assertTrue(self.cleared())
+
+    def test_take_gives_up_when_the_turn_frees_after_the_deadline(self):
+        self.tune(POLL_SECONDS=0.5)
+        holder, waiter = Q.Turn("a long recalc"), Q.Turn("late")
+        holder.take()
+        freed = threading.Timer(0.25, holder.release)
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                freed.start()
+                with self.assertRaises(Q.QueueTimeout):
+                    waiter.take(0.1)
+        finally:
+            waiter.release()
+            freed.join()
+        self.assertTrue(self.cleared())
+
+    def shutdown(self, sig: int, grandchild: str, excels: str = "[]", grace: float = 30.0):
+        pids = self.tmp / f"job-{sig}-{grandchild}"
+        errors = self.tmp / f"{pids.name}.err"
+        with open(errors, "w") as err:
+            run = subprocess.Popen(wrapper("run", "--purpose", "job", "--", sys.executable, "-c", JOB, str(pids),
+                                           grandchild, excels=excels, grace=grace), stderr=err)
+        job: list[int] = []
+        try:
+            eventually(lambda: Path(f"{pids}.child").exists() and Path(f"{pids}.grand").exists())
+            job = [int(Path(f"{pids}.{part}").read_text()) for part in ("child", "grand")]
+            self.assertTrue((self.queue / "lock").exists())
+            samples, started = [], time.monotonic()
+            os.kill(run.pid, sig)
+            while run.poll() is None and time.monotonic() - started < 30:
+                samples.append(((self.queue / "lock").exists(), any(alive(pid) for pid in job)))
+                time.sleep(0.002)
+            elapsed = time.monotonic() - started
+            self.assertEqual(run.wait(5), 128 + sig, errors.read_text())
+        finally:
+            for pid in job:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGKILL)
+            if run.poll() is None:
+                run.kill()
+                run.wait()
+        self.assertFalse(any(alive(pid) for pid in job))
+        self.assertTrue(all(locked for locked, running in samples if running))
+        self.assertTrue(any(running for _, running in samples))
+        return samples, elapsed
+
+    def test_a_signalled_run_stops_its_whole_job_before_it_gives_the_turn_back(self):
+        for sig, grandchild, grace in ((signal.SIGTERM, "slow", 30.0), (signal.SIGINT, "slow", 30.0),
+                                       (signal.SIGTERM, "stubborn", 0.5)):
+            with self.subTest(signal=sig, grandchild=grandchild):
+                samples, elapsed = self.shutdown(sig, grandchild, grace=grace)
+                self.assertTrue(self.cleared())
+                self.assertGreaterEqual(elapsed, 0.3 if grandchild == "slow" else 0.5)
+
+    def test_a_signalled_run_leaves_an_abandoned_lock_while_automation_excel_lives(self):
+        self.shutdown(signal.SIGTERM, "slow", excels="[4242]")
+        holder = json.loads((self.queue / "lock" / "holder.json").read_text())
+        self.assertEqual(holder["abandoned"], "stopped by signal 15 while automation Excel pids 4242 are running")
+        self.assertEqual(list((self.queue / "tickets").iterdir()), [])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            Q.main(["status"])
+        self.assertIn("  abandoned: stopped by signal 15 while automation Excel pids 4242", out.getvalue())
+
+    def test_a_running_automation_excel_or_a_failed_check_blocks_every_stale_break(self):
+        failed = Q.ExcelQueryError("the Excel check could not run: no powershell.exe")
+        for n, (query, said) in enumerate(((mock.Mock(return_value=[4242, 4343]),
+                                            "automation Excel pids 4242, 4343 are running"),
+                                           (mock.Mock(side_effect=failed), str(failed)))):
+            for how in ("waiter", "release --stale-only"):
+                with self.subTest(said=said, how=how):
+                    root = self.tmp / f"case-{n}-{how[:6]}"
+                    err, out = io.StringIO(), io.StringIO()
+                    with mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(root)}), \
+                            mock.patch.object(Q, "live_automation_excels", query), \
+                            contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                        lock = ghost_holder(root, "crashed run", heartbeat_ago=601)
+                        if how == "waiter":
+                            with self.assertRaises(Q.QueueTimeout):
+                                with Q.excel_turn("next run", timeout=0.3):
+                                    self.fail("broke a lock while its Excel was running")
+                        else:
+                            self.assertEqual(Q.main(["release", "--stale-only"]), 1)
+                        Q.main(["status"])
+                    refused = [line for line in err.getvalue().splitlines() if "is stale" in line]
+                    self.assertEqual(len(refused), 1)
+                    self.assertTrue(refused[0].endswith(f"but {said}; end that Excel (Task Manager) or wait"))
+                    self.assertIn(f"but {said}; end that Excel (Task Manager) or wait", out.getvalue())
+                    self.assertEqual((lock.exists(), list(root.glob("stale-*")), (root / "recovery").exists()),
+                                     (True, [], False))
+
+    def test_the_excel_check_counts_only_running_automation_excels(self):
+        found = [{"ProcessId": 11, "CommandLine": '"C:\\Office\\EXCEL.EXE" /automation -Embedding'},
+                 {"ProcessId": 12, "CommandLine": '"C:\\Office\\EXCEL.EXE" "C:\\Users\\me\\book.xlsx"'},
+                 {"ProcessId": 13, "CommandLine": None}]
+        wsl = mock.Mock(release="5.15.167.4-microsoft-standard-WSL2")
+        for stdout, code, expected in ((json.dumps(found), 0, [11]), (json.dumps(found[0]), 0, [11]),
+                                       ("", 0, []), ("", 1, None), ("Excel: none", 0, None)):
+            with self.subTest(stdout=stdout, code=code):
+                done = subprocess.CompletedProcess([], code, stdout.encode(), b"")
+                with mock.patch.object(Q.platform, "uname", return_value=wsl), \
+                        mock.patch.object(Q.subprocess, "run", return_value=done) as ran:
+                    if expected is None:
+                        self.assertRaises(Q.ExcelQueryError, QUERY)
+                    else:
+                        self.assertEqual(QUERY(), expected)
+                self.assertEqual(ran.call_args[0][0][:3], ["powershell.exe", "-NoProfile", "-NonInteractive"])
+        with mock.patch.object(Q.platform, "uname", return_value=wsl), \
+                mock.patch.object(Q.subprocess, "run", side_effect=FileNotFoundError("powershell.exe")):
+            self.assertRaises(Q.ExcelQueryError, QUERY)
+        with mock.patch.object(Q.platform, "uname", return_value=mock.Mock(release="6.1.0-generic")), \
+                mock.patch.object(Q.subprocess, "run") as ran:
+            self.assertRaisesRegex(Q.ExcelQueryError, "only Windows and WSL", QUERY)
+        ran.assert_not_called()
+
+    def test_two_breakers_cannot_displace_a_fresh_holder(self):
+        ghost_holder(self.queue, "crashed run", heartbeat_ago=601)
+        confirmed = Q.read_holder(self.queue)
+        paused, resume, took = threading.Event(), threading.Event(), threading.Event()
+        calls: list[str] = []
+
+        def query():
+            calls.append(threading.current_thread().name)
+            if len(calls) == 1:
+                paused.set()
+                resume.wait(10)
+            return []
+        results: dict[str, bool] = {}
+        fresh = Q.Turn("fresh holder", self.queue)
+
+        def breaker(name):
+            results[name] = Q.break_lock(self.queue, confirmed, name)
+
+        def take():
+            end = time.monotonic() + 10
+            while time.monotonic() < end and not fresh._lock():
+                time.sleep(0.001)
+            took.set()
+        first = threading.Thread(target=breaker, args=("first",), name="first")
+        second = threading.Thread(target=breaker, args=("second",), name="second")
+        taker = threading.Thread(target=take)
+        with contextlib.redirect_stderr(io.StringIO()), mock.patch.object(Q, "live_automation_excels", query):
+            first.start()
+            self.assertTrue(paused.wait(10))
+            taker.start()
+            second.start()
+            second.join(10)
+            took.wait(0.5)
+            resume.set()
+            for thread in (first, taker):
+                thread.join(10)
+            self.assertIs(Q.break_lock(self.queue, confirmed, "third"), False)
+        try:
+            self.assertEqual((results, calls), ({"first": True, "second": False}, ["first"]))
+            self.assertEqual(json.loads((self.queue / "lock" / "holder.json").read_text())["ticket"], fresh.name)
+            (kept,) = self.queue.glob("stale-*")
+            self.assertEqual(json.loads((kept / "holder.json").read_text())["purpose"], "crashed run")
+            self.assertFalse((self.queue / "recovery").exists())
+        finally:
+            fresh.release()
+
+    def test_a_recovery_step_is_broken_only_once_its_breaker_is_a_minute_silent(self):
+        lock = ghost_holder(self.queue, "crashed run", heartbeat_ago=601)
+        step = self.queue / "recovery"
+        for since, broken in ((50, False), (61, True)):
+            with self.subTest(since=since):
+                step.mkdir(exist_ok=True)
+                (step / "breaker.json").write_text(json.dumps({"who": "dead breaker", "since": ago(since)}))
+                with contextlib.redirect_stderr(io.StringIO()):
+                    if broken:
+                        with Q.excel_turn("next run", timeout=5):
+                            self.assertEqual(Q.status()["holder"]["purpose"], "next run")
+                    else:
+                        with self.assertRaises(Q.QueueTimeout):
+                            with Q.excel_turn("next run", timeout=0.3):
+                                self.fail("broke a lock while another breaker was mid-step")
+                self.assertEqual((lock.exists(), step.exists()), (not broken, not broken))
+        log = (self.queue / "queue.log").read_text()
+        self.assertIn("broke the recovery step of dead breaker on ? (pid ?)", log)
+        self.assertEqual(len(list(self.queue.glob("recovery-dead-*"))), 1)
+
+    def test_an_unusable_queue_folder_fails_loudly(self):
+        real = os.mkdir
+
+        def mkdir(path, *args, **kwargs):
+            if Path(path).name == "lock":
+                raise PermissionError(13, "Permission denied")
+            return real(path, *args, **kwargs)
+        with mock.patch.object(Q.os, "mkdir", mkdir), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(OSError) as raised:
+                with Q.excel_turn("next run", timeout=5):
+                    self.fail("took a lock it could not make")
+        self.assertNotIsInstance(raised.exception, Q.QueueTimeout)
+        self.assertIn(f"cannot use the queue folder {self.queue}", str(raised.exception))
 
 
 if __name__ == "__main__":

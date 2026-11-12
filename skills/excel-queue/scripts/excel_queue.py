@@ -1,47 +1,13 @@
-r"""The machine-wide Excel queue: one Excel automation at a time on this desktop, served in arrival order.
-
-Source: skills/excel-queue/scripts/excel_queue.py in the dev-skills repository, its one home; the skill's SKILL.md
-says when and how to use it. Every session runs it from a dev-skills checkout; there is no installed copy.
-
-Sessions whose automation Excels overlap on one desktop collide: one run waited 13 hours, an earlier one hung in
-Workbooks.Open until Excel was ended by hand. So every session takes a turn before it starts Excel and gives it
-back after Excel quits. In Python (stdlib only):
-
-    with excel_turn("what the turn is for"):
-        ...start Excel, use it, quit it...
-
-From any shell:
-
-    python3 excel_queue.py run [--purpose TEXT] [--timeout SECONDS] -- <command...>
-        take a turn, run the command, give the turn back; exits with the command's exit code
-        (75 when --timeout passes before the turn comes; the command is then never started)
-    python3 excel_queue.py status                  who holds Excel and who is waiting
-    python3 excel_queue.py release --stale-only    break the lock only when its holder is stale
-
-The queue folder is C:\ProgramData\excel-queue on Windows and /mnt/c/ProgramData/excel-queue from WSL;
-EXCEL_QUEUE_DIR overrides it. In it:
-
-    lock/holder.json          the holder: who, host, pid, purpose, arrived, started, heartbeat, ticket. The lock
-                              is the directory: os.mkdir creates it for exactly one caller.
-    tickets/<utc>-<id>.json   one per session in line, and the holder's until it releases, each with its own
-                              heartbeat. Only the oldest live ticket may take the lock, so turns go in arrival order.
-    stale-<utc>-<id>/         a broken stale lock, its holder.json kept for inspection.
-    queue.log                 one line per broken lock and per removed stale ticket.
-
-A session refreshes its heartbeats every HEARTBEAT_SECONDS from a daemon thread, waiting or holding; one silent
-for STALE_SECONDS is stale. A waiter removes a stale ticket, and the first in line breaks a stale lock, only once it
-has seen the same record on CONFIRM_POLLS polls in a row (confirmed_stale), so a live writer whose clock runs behind
-(WSL's and Windows' clocks can differ) is never removed or broken: its heartbeat keeps changing. Arrival order is
-each writer's own clock: a session whose clock is X behind goes ahead of anyone who arrived up to X earlier.
-Waiting prints one line, then is quiet.
-A nested excel_turn in the same thread joins the turn it is in; other threads count as other sessions.
-"""
+"""The machine-wide Excel queue. SKILL.md (skills/excel-queue in dev-skills) says how to use it and how it works."""
 from __future__ import annotations
 
 import argparse
+import base64
 import getpass
 import json
 import os
+import platform
+import signal
 import socket
 import subprocess
 import sys
@@ -57,6 +23,10 @@ HEARTBEAT_SECONDS = 30.0
 STALE_SECONDS = 600.0
 POLL_SECONDS = 1.0
 CONFIRM_POLLS = 90
+RECOVERY_STALE_SECONDS = 60.0
+EXCEL_RECHECK_SECONDS = 30.0
+QUERY_SECONDS = 20.0
+GRACE_SECONDS = 30.0
 RETRIES = 40
 RETRY_SECONDS = 0.05
 TIMEOUT_EXIT = 75
@@ -65,17 +35,35 @@ SCRIPT = "excel_queue.py"
 LOCK = "lock"
 HOLDER = "holder.json"
 TICKETS = "tickets"
+RECOVERY = "recovery"
+BREAKER = "breaker.json"
 LOG = "queue.log"
 NAME_TIME = "%Y%m%dT%H%M%S.%fZ"
 RECORD_TIME = "%Y-%m-%dT%H:%M:%S.%fZ"
+EXCEL_QUERY = ("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+               "Get-CimInstance Win32_Process -Filter \"Name='EXCEL.EXE'\" | Select ProcessId,CommandLine | "
+               "ConvertTo-Json")
+GROUP = ({"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if sys.platform == "win32"
+         else {"start_new_session": True})
 
 
 class QueueTimeout(TimeoutError):
-    """The turn did not come within the timeout. The ticket is withdrawn and Excel was never started."""
+    pass
+
+
+class Cancelled(Exception):
+    pass
+
+
+class ExcelQueryError(RuntimeError):
+    pass
+
+
+class RecoveryRefused(RuntimeError):
+    pass
 
 
 def queue_dir() -> Path:
-    """EXCEL_QUEUE_DIR when set; else ProgramData's excel-queue, through the C: mount when not on Windows."""
     override = os.environ.get("EXCEL_QUEUE_DIR")
     if override:
         return Path(override)
@@ -88,12 +76,15 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime(RECORD_TIME)
 
 
+def stamp() -> str:
+    return f"{datetime.now(timezone.utc).strftime(NAME_TIME)}-{uuid.uuid4().hex[:8]}"
+
+
 def ascii_text(text: object) -> str:
     return str(text).encode("ascii", "replace").decode("ascii")
 
 
 def whoami() -> str:
-    """The user, and whether the session runs in WSL (which distribution) or on Windows."""
     try:
         user = getpass.getuser()
     except (OSError, ImportError, KeyError):
@@ -105,8 +96,7 @@ def whoami() -> str:
 
 
 def retried(action: Callable[..., object], *paths: Path) -> bool:
-    """Run a file operation on `paths`: True when done, False when its file was already gone. Windows refuses to
-    replace or delete a file another process has open, so a refusal is retried for a moment before it is raised."""
+    """False when the file was already gone. Windows refuses to replace or delete a file another process has open."""
     for attempt in range(RETRIES):
         try:
             action(*paths)
@@ -121,7 +111,6 @@ def retried(action: Callable[..., object], *paths: Path) -> bool:
 
 
 def write_json(root: Path, path: Path, record: dict) -> None:
-    """Write `record` to `path` whole: a temporary file in `root`, swapped in, so a reader never sees part of one."""
     staged = root / f".tmp-{uuid.uuid4().hex}"
     staged.write_text(json.dumps(record), encoding="ascii")
     try:
@@ -139,16 +128,44 @@ def read_json(path: Path) -> dict | None:
 
 
 def parse_time(stamp: object) -> float | None:
-    """A record's time (RECORD_TIME, UTC) as a POSIX timestamp; None when it has none."""
     try:
         return datetime.strptime(str(stamp), RECORD_TIME).replace(tzinfo=timezone.utc).timestamp()
     except ValueError:
         return None
 
 
+def live_automation_excels() -> list[int]:
+    """PIDs of running EXCEL.EXE started by COM (/automation); raises ExcelQueryError when it cannot tell."""
+    if sys.platform != "win32" and "microsoft" not in platform.uname().release.lower():
+        raise ExcelQueryError(f"no Excel check on {sys.platform}: only Windows and WSL are supported")
+    script = base64.b64encode(EXCEL_QUERY.encode("utf-16-le")).decode("ascii")
+    try:
+        done = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", script],
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=QUERY_SECONDS)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ExcelQueryError(f"the Excel check could not run: {e}") from e
+    if done.returncode != 0:
+        raise ExcelQueryError(f"the Excel check failed (exit {done.returncode}): "
+                              f"{done.stderr.decode('utf-8', 'replace').strip()[:200]}")
+    text = done.stdout.decode("utf-8", "replace").strip().lstrip("\ufeff")
+    try:
+        found = json.loads(text) if text else []
+    except ValueError as e:
+        raise ExcelQueryError(f"the Excel check returned no JSON: {text[:200]}") from e
+    found = found if isinstance(found, list) else [found]
+    return sorted(int(p["ProcessId"]) for p in found
+                  if "/automation" in str(p.get("CommandLine") or "").lower())
+
+
+def excel_blocker() -> str | None:
+    try:
+        pids = live_automation_excels()
+    except ExcelQueryError as e:
+        return str(e)
+    return f"automation Excel pids {', '.join(map(str, pids))} are running" if pids else None
+
+
 def observed(record: dict | None, changed: float) -> dict:
-    """`age` since the record's heartbeat (since `changed`, a modification time, when it has none), `stale`, and
-    `seen`, which identifies what was observed, for confirmed_stale."""
     beat = parse_time((record or {}).get("heartbeat"))
     age = time.time() - (changed if beat is None else beat)
     seen = json.dumps(record, sort_keys=True) if record else f"changed {changed}"
@@ -156,9 +173,6 @@ def observed(record: dict | None, changed: float) -> dict:
 
 
 def read_holder(root: Path) -> dict | None:
-    """The holder's record with what `observed` adds and `held_minutes`, from its own start to its own last heartbeat
-    (one clock, so no skew); None when nobody holds the lock. A lock whose holder.json cannot be read (not yet
-    written, or being released) is judged by when the lock last changed."""
     lock = root / LOCK
     record = read_json(lock / HOLDER)
     try:
@@ -172,7 +186,6 @@ def read_holder(root: Path) -> dict | None:
 
 
 def holder_ticket(lock: Path) -> str | None:
-    """The ticket the lock's holder.json names; None when the lock has no holder.json."""
     path = lock / HOLDER
     for _ in range(RETRIES):
         record = read_json(path)
@@ -184,26 +197,27 @@ def holder_ticket(lock: Path) -> str | None:
     return None
 
 
+def read_ticket(path: Path) -> dict | None:
+    record = read_json(path)
+    try:
+        changed = path.stat().st_mtime
+    except OSError:
+        return None
+    return {**(record or {}), "ticket": path.stem, **observed(record, changed)}
+
+
 def read_tickets(root: Path) -> list[dict]:
-    """Every ticket in arrival order (by name), with its heartbeat `age` and `stale`."""
-    tickets = []
-    for path in sorted((root / TICKETS).glob("*.json")):
-        record = read_json(path)
-        try:
-            changed = path.stat().st_mtime
-        except OSError:
-            continue
-        tickets.append({**(record or {}), "ticket": path.stem, **observed(record, changed)})
-    return tickets
+    tickets = (read_ticket(path) for path in sorted((root / TICKETS).glob("*.json")))
+    return [t for t in tickets if t is not None]
 
 
 def status(root: Path | None = None) -> dict:
-    """The queue folder, the holder (None when free), the sessions waiting in arrival order, the broken locks kept."""
     root = root or queue_dir()
     holder = read_holder(root)
     held = holder.get("ticket") if holder else None
     return {"dir": str(root),
             "holder": {k: v for k, v in holder.items() if k != "seen"} if holder else None,
+            "excel": excel_blocker() if holder and holder["stale"] else None,
             "queue": [{k: v for k, v in t.items() if k != "seen"} for t in read_tickets(root) if t["ticket"] != held],
             "stale_locks": sorted(p.name for p in root.glob("stale-*"))}
 
@@ -216,16 +230,25 @@ def short_time(stamp: object) -> str:
     return f"{str(stamp)[:19].replace('T', ' ')}Z" if stamp else "?"
 
 
+def refusal(holder: dict, blocker: str) -> str:
+    return (f"the lock of {describe(holder)} is stale (heartbeat {holder['age']:.0f}s old), but {blocker}; "
+            f"end that Excel (Task Manager) or wait")
+
+
 def format_status(state: dict) -> list[str]:
-    """`status` as ASCII lines for a console."""
     def entry(record: dict, since: str) -> str:
         return (f"{describe(record)} since {short_time(record.get(since))}, heartbeat {record['age']:.0f}s ago"
                 f"{', STALE' if record['stale'] else ''}: {record.get('purpose', '?')}")
     holder = state["holder"]
     held = f" (held {holder['held_minutes']:.0f} min)" if holder and holder.get("held_minutes") is not None else ""
     lines = [f"excel-queue {state['dir']}",
-             f"holder: {entry(holder, 'started')}{held}" if holder else "holder: none, Excel is free",
-             f"waiting: {len(state['queue'])}"]
+             f"holder: {entry(holder, 'started')}{held}" if holder else "holder: none, Excel is free"]
+    if holder and holder.get("abandoned"):
+        lines.append(f"  abandoned: {holder['abandoned']}")
+    if holder and holder["stale"]:
+        lines.append(f"  {refusal(holder, state['excel'])}" if state["excel"] else
+                     "  stale, and no automation Excel is running: the first waiter breaks it once confirmed")
+    lines.append(f"waiting: {len(state['queue'])}")
     lines += [f"  {n}. {entry(t, 'arrived')}" for n, t in enumerate(state["queue"], 1)]
     if state["stale_locks"]:
         lines.append(f"broken stale locks kept: {', '.join(state['stale_locks'])}")
@@ -233,7 +256,6 @@ def format_status(state: dict) -> list[str]:
 
 
 def note(root: Path, text: str) -> None:
-    """Say `text` on stderr and append it, timed, to the queue's log."""
     print(ascii_text(f"excel-queue: {text}"), file=sys.stderr, flush=True)
     try:
         with open(root / LOG, "a", encoding="ascii") as fh:
@@ -243,9 +265,6 @@ def note(root: Path, text: str) -> None:
 
 
 def confirmed_stale(observation: dict, seen: dict) -> bool:
-    """True once the same stale record (a holder's or a ticket's) has been seen on CONFIRM_POLLS polls in a row;
-    `seen` carries the count from one poll to the next. A live writer whose clock runs behind still changes its
-    heartbeat every HEARTBEAT_SECONDS, so it is never confirmed."""
     if not observation["stale"]:
         seen.clear()
         return False
@@ -255,28 +274,98 @@ def confirmed_stale(observation: dict, seen: dict) -> bool:
     return count >= CONFIRM_POLLS
 
 
-def break_lock(root: Path, holder: dict, by: str) -> bool:
-    """Rename the stale lock that `holder` confirmed to stale-<utc>-<id>, kept for inspection, and log it; only when
-    the lock still holds that same record (ticket and heartbeat), so a lock taken since is left alone. False when it
-    does not, or the rename failed (the lock is gone, or another process has a file in it open); the caller looks
-    again on its next poll. The check and the rename are two steps: a lock released and taken again between them
-    would still be renamed, a window of microseconds after ten minutes of silence."""
-    current = read_holder(root)
-    if current is None or current["seen"] != holder["seen"]:
-        return False
-    kept = f"stale-{datetime.now(timezone.utc).strftime(NAME_TIME)}-{uuid.uuid4().hex[:8]}"
+def clear_dead_recovery(root: Path) -> None:
+    path = root / RECOVERY
+    record = read_json(path / BREAKER)
+    since = parse_time((record or {}).get("since"))
     try:
-        os.rename(root / LOCK, root / kept)
+        since = path.stat().st_mtime if since is None else since
     except OSError:
-        return False
+        return
+    if time.time() - since <= RECOVERY_STALE_SECONDS:
+        return
+    tomb = root / f"recovery-dead-{stamp()}"
+    try:
+        os.rename(path, tomb)
+    except OSError:
+        return
+    if read_json(tomb / BREAKER) != record:
+        try:
+            os.rename(tomb, path)
+        except OSError:
+            pass
+        return
+    note(root, f"broke the recovery step of {describe(record or {})}, begun {short_time((record or {}).get('since'))}"
+               f": its breaker stopped mid-step; kept as {tomb.name}")
+
+
+@contextmanager
+def recovery(root: Path, by: str) -> Iterator[bool]:
+    """The mutex around every destructive recovery step; yields False when another breaker is in one."""
+    path = root / RECOVERY
+    mine = {"who": by, "host": socket.gethostname(), "pid": os.getpid(), "since": utc_now(), "id": uuid.uuid4().hex}
+    try:
+        os.mkdir(path)
+        entered = True
+    except FileExistsError:
+        entered = False
+    if not entered:
+        clear_dead_recovery(root)
+        yield False
+        return
+    try:
+        write_json(root, path / BREAKER, mine)
+    except BaseException:
+        retried(os.rmdir, path)
+        raise
+    try:
+        yield True
+    finally:
+        if read_json(path / BREAKER) == mine:
+            retried(os.unlink, path / BREAKER)
+            retried(os.rmdir, path)
+
+
+def break_lock(root: Path, holder: dict, by: str) -> bool:
+    """RecoveryRefused while an automation Excel runs or the check fails."""
+    with recovery(root, by) as entered:
+        if not entered:
+            return False
+        current = read_holder(root)
+        if current is None or current["seen"] != holder["seen"]:
+            return False
+        blocker = excel_blocker()
+        if blocker:
+            raise RecoveryRefused(blocker)
+        kept = f"stale-{stamp()}"
+        try:
+            os.rename(root / LOCK, root / kept)
+        except OSError:
+            return False
     note(root, f"{by} broke the stale lock of {describe(holder)} (heartbeat {holder['age']:.0f}s old), "
                f"for: {holder.get('purpose', '?')}; kept as {kept}")
     return True
 
 
-class Turn:
-    """One session's place in the queue: a ticket, then the lock. A daemon thread refreshes both heartbeats."""
+def remove_ticket(root: Path, ticket: dict, by: str) -> bool:
+    path = root / TICKETS / f"{ticket['ticket']}.json"
+    with recovery(root, by) as entered:
+        if not entered:
+            return False
+        current = read_ticket(path)
+        if current is None or current["seen"] != ticket["seen"]:
+            return False
+        try:
+            removed = retried(os.unlink, path)
+        except OSError:
+            return False
+    if removed:
+        note(root, f"{by} removed the stale ticket of {describe(ticket)} (heartbeat {ticket['age']:.0f}s old), "
+                   f"for: {ticket.get('purpose', '?')}")
+    return removed
 
+
+class Turn:
     def __init__(self, purpose: str, root: Path | None = None):
         self.root = root or queue_dir()
         self.name = f"{datetime.now(timezone.utc).strftime(NAME_TIME)}-{uuid.uuid4().hex}"
@@ -288,49 +377,84 @@ class Turn:
                        "purpose": ascii_text(purpose)[:PURPOSE_CHARS], "arrived": now, "heartbeat": now,
                        "ticket": self.name}
         self.holding = False
+        self.abandoned = False
+        self.cancelled: int | None = None
+        self.deadline: float | None = None
+        self.tries = 0
         self._writing = threading.Lock()
         self._stop = threading.Event()
         self._beat = threading.Thread(target=self._heartbeat, name="excel-queue heartbeat", daemon=True)
         self._watching: dict[str, dict] = {}
+        self._refused: set[str] = set()
+        self._excel_next = 0.0
+
+    def expired(self) -> bool:
+        return self.deadline is not None and time.monotonic() >= self.deadline
 
     def take(self, timeout: float | None = None) -> None:
-        """Wait in line until this turn holds the lock; QueueTimeout after `timeout` seconds (None: no limit)."""
         self.ticket.parent.mkdir(parents=True, exist_ok=True)
         self._write(self.ticket)
         self._beat.start()
-        deadline = None if timeout is None else time.monotonic() + timeout
+        self.deadline = None if timeout is None else time.monotonic() + timeout
         seen: dict = {}
         announced = False
         while True:
+            if self.cancelled is not None:
+                raise Cancelled(self.cancelled)
             holder, line = self._line()
             place = line.index(self.name) + 1
-            if place == 1:
-                if self._lock():
-                    return
-                if holder and confirmed_stale(holder, seen) and break_lock(self.root, holder, self.who):
-                    continue
             held = (f"held by {describe(holder)} since {short_time(holder.get('started'))} for: "
                     f"{holder.get('purpose', '?')}" if holder else "free, with earlier arrivals ahead")
             where = ascii_text(f"{held}; place in line {place} of {len(line)}")
+            if self.tries and self.expired():
+                raise QueueTimeout(f"excel-queue: no turn within {timeout:g}s, {where}")
+            if place == 1:
+                self.tries += 1
+                if self._lock():
+                    return
+                if holder and confirmed_stale(holder, seen) and self._break(holder):
+                    continue
             if not announced:
                 print(f"excel-queue: waiting for Excel, {where}", file=sys.stderr, flush=True)
                 announced = True
-            if deadline is not None and time.monotonic() >= deadline:
+            if self.expired():
                 raise QueueTimeout(f"excel-queue: no turn within {timeout:g}s, {where}")
             time.sleep(POLL_SECONDS)
+            self.tries = max(self.tries, 1)
 
     def release(self) -> None:
-        """Give the turn back: stop the heartbeat, then remove holder.json, the lock and the ticket."""
-        self._stop.set()
-        if self._beat.is_alive():
-            self._beat.join()
+        self._halt()
         try:
-            if self.holding and holder_ticket(self.lock) == self.name:
+            if self.holding and not self.abandoned and holder_ticket(self.lock) == self.name:
                 retried(os.unlink, self.lock / HOLDER)
                 retried(os.rmdir, self.lock)
         finally:
             self.holding = False
             retried(os.unlink, self.ticket)
+
+    def abandon(self, reason: str) -> None:
+        self._halt()
+        self.abandoned = True
+        if self.holding and holder_ticket(self.lock) == self.name:
+            self._write(self.lock / HOLDER, abandoned=ascii_text(reason))
+        note(self.root, f"{self.who} left its lock in place, abandoned: {reason}; for: {self.record['purpose']}")
+
+    def _halt(self) -> None:
+        self._stop.set()
+        if self._beat.is_alive():
+            self._beat.join()
+
+    def _break(self, holder: dict) -> bool:
+        if time.monotonic() < self._excel_next:
+            return False
+        try:
+            return break_lock(self.root, holder, self.who)
+        except RecoveryRefused as e:
+            self._excel_next = time.monotonic() + EXCEL_RECHECK_SECONDS
+            if holder["seen"] not in self._refused:
+                self._refused.add(holder["seen"])
+                note(self.root, refusal(holder, str(e)))
+            return False
 
     def _write(self, path: Path, **changes: str) -> None:
         with self._writing:
@@ -338,9 +462,6 @@ class Turn:
             write_json(self.root, path, self.record)
 
     def _line(self) -> tuple[dict | None, list[str]]:
-        """The holder, and the live tickets in arrival order without the holder's. Removes a ticket once it is
-        confirmed stale (confirmed_stale, per ticket), and puts this session's ticket back under its own name, so in
-        its own place, when another session removed it."""
         holder = read_holder(self.root)
         held = holder.get("ticket") if holder else None
         line, watching = [], {}
@@ -350,8 +471,7 @@ class Turn:
                 continue
             if name != self.name:
                 watching[name] = self._watching.get(name, {})
-                if confirmed_stale(ticket, watching[name]):
-                    self._remove(ticket)
+                if confirmed_stale(ticket, watching[name]) and remove_ticket(self.root, ticket, self.who):
                     continue
             line.append(name)
         self._watching = watching
@@ -360,20 +480,13 @@ class Turn:
             line = sorted(line + [self.name])
         return holder, line
 
-    def _remove(self, ticket: dict) -> None:
-        try:
-            removed = retried(os.unlink, self.root / TICKETS / f"{ticket['ticket']}.json")
-        except OSError:
-            return
-        if removed:
-            note(self.root, f"{self.who} removed the stale ticket of {describe(ticket)} (heartbeat "
-                            f"{ticket['age']:.0f}s old), for: {ticket.get('purpose', '?')}")
-
     def _lock(self) -> bool:
         try:
             os.mkdir(self.lock)
-        except OSError:
+        except FileExistsError:
             return False
+        except OSError as e:
+            raise OSError(e.errno, f"excel-queue: cannot use the queue folder {self.root}: {e.strerror}") from e
         try:
             self._write(self.lock / HOLDER, started=utc_now())
         except BaseException:
@@ -403,9 +516,6 @@ _held = threading.local()
 
 @contextmanager
 def excel_turn(purpose: str, timeout: float | None = None) -> Iterator[Turn]:
-    """Hold the machine-wide Excel turn for the block: wait in line, hold, give it back on the way out, whatever
-    happens. QueueTimeout when `timeout` seconds pass first. Inside a turn, a nested excel_turn in the same thread
-    joins it."""
     inside = getattr(_held, "turn", None)
     if inside is not None:
         yield inside
@@ -420,27 +530,100 @@ def excel_turn(purpose: str, timeout: float | None = None) -> Iterator[Turn]:
         turn.release()
 
 
-def run_in_turn(command: list[str], purpose: str | None = None, timeout: float | None = None) -> int:
-    """Take a turn, run `command`, give the turn back. The command's exit code (128 + N when signal N ended it),
-    127 when it could not start, TIMEOUT_EXIT when the turn did not come in time."""
+def trap(handler: Callable) -> Callable[[], None]:
+    if threading.current_thread() is not threading.main_thread():
+        return lambda: None
+    previous = {}
+    for name in ("SIGTERM", "SIGINT", "SIGHUP"):
+        number = getattr(signal, name, None)
+        if number is not None:
+            previous[number] = signal.signal(number, handler)
+
+    def restore() -> None:
+        for number, old in previous.items():
+            signal.signal(number, signal.SIG_DFL if old is None else old)
+    return restore
+
+
+def group_alive(child: subprocess.Popen) -> bool:
+    if child.poll() is None:
+        return True
+    if sys.platform == "win32":
+        return False
     try:
-        with excel_turn(purpose or " ".join(command), timeout):
-            try:
-                code = subprocess.call(command)
-            except OSError as e:
-                print(ascii_text(f"excel-queue: could not start {command[0]}: {e}"), file=sys.stderr, flush=True)
-                return 127
-    except QueueTimeout as e:
-        print(e, file=sys.stderr, flush=True)
-        return TIMEOUT_EXIT
-    return 128 - code if code < 0 else code
+        os.killpg(child.pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def signal_group(child: subprocess.Popen, hard: bool) -> None:
+    try:
+        if sys.platform == "win32":
+            child.terminate() if hard else child.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(child.pid, signal.SIGKILL if hard else signal.SIGTERM)
+    except OSError:
+        pass
+
+
+def stop_group(child: subprocess.Popen) -> None:
+    signal_group(child, hard=False)
+    end, killed = time.monotonic() + GRACE_SECONDS, False
+    while group_alive(child):
+        if not killed and time.monotonic() >= end:
+            signal_group(child, hard=True)
+            killed = True
+        time.sleep(0.05)
+
+
+def run_in_turn(command: list[str], purpose: str | None = None, timeout: float | None = None) -> int:
+    turn = Turn(purpose or " ".join(command))
+    signals: list[int] = []
+
+    def on_signal(signum: int, frame: object) -> None:
+        signals.append(signum)
+        turn.cancelled = signals[0]
+    restore = trap(on_signal)
+    try:
+        try:
+            turn.take(timeout)
+        except QueueTimeout as e:
+            print(e, file=sys.stderr, flush=True)
+            return TIMEOUT_EXIT
+        except Cancelled:
+            return 128 + signals[0]
+        if signals:
+            return 128 + signals[0]
+        if turn.tries > 1 and turn.expired():
+            print(f"excel-queue: no turn within {timeout:g}s; the command was not started", file=sys.stderr,
+                  flush=True)
+            return TIMEOUT_EXIT
+        try:
+            child = subprocess.Popen(command, **GROUP)
+        except OSError as e:
+            print(ascii_text(f"excel-queue: could not start {command[0]}: {e}"), file=sys.stderr, flush=True)
+            return 127
+        while not signals and child.poll() is None:
+            time.sleep(0.05)
+        if not signals:
+            return 128 - child.returncode if child.returncode < 0 else child.returncode
+        stop_group(child)
+        blocker = excel_blocker()
+        if blocker:
+            turn.abandon(f"stopped by signal {signals[0]} while {blocker}")
+        return 128 + signals[0]
+    finally:
+        turn.release()
+        restore()
 
 
 def release_stale(root: Path | None = None) -> int:
-    """Break the lock only when its holder is stale, confirmed as a waiter confirms it. 0 when it was broken or
-    nobody holds it; 1 when the holder is live."""
     root = root or queue_dir()
     seen: dict = {}
+    who = whoami()
     while True:
         holder = read_holder(root)
         if holder is None:
@@ -453,14 +636,19 @@ def release_stale(root: Path | None = None) -> int:
         if not seen:
             print(f"excel-queue: the lock looks stale; watching it for {CONFIRM_POLLS} polls before breaking it.",
                   flush=True)
-        if confirmed_stale(holder, seen) and break_lock(root, holder, whoami()):
-            return 0
+        if confirmed_stale(holder, seen):
+            try:
+                if break_lock(root, holder, who):
+                    return 0
+            except RecoveryRefused as e:
+                note(root, refusal(holder, str(e)))
+                return 1
         time.sleep(POLL_SECONDS)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog=SCRIPT, description="The machine-wide Excel queue: one Excel "
-                                     "automation at a time on this desktop, in arrival order.")
+                                     "automation at a time on this desktop.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="who holds Excel and who is waiting")
     turn = sub.add_parser("run", help="take a turn, run the command, give the turn back; exits with its code")
@@ -470,7 +658,8 @@ def main(argv: list[str] | None = None) -> int:
     turn.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command to run")
     release = sub.add_parser("release", help="break the lock of a stale holder")
     release.add_argument("--stale-only", action="store_true", required=True,
-                         help="required: only a stale holder's lock is broken, never a live one")
+                         help="required: only a stale holder's lock is broken, never a live one or one whose "
+                              "automation Excel is still running")
     args = parser.parse_args(argv)
     if args.cmd == "status":
         print("\n".join(format_status(status())), flush=True)
