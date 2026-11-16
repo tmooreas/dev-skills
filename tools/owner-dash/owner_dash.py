@@ -411,6 +411,15 @@ def is_test(path):
     return any(part.startswith("test") for part in Path(path).parts)
 
 
+DATA_DIRS = ("dev/evals/chat/frozen/",)
+DATA_SUFFIXES = {".csv", ".json", ".jsonl", ".parquet", ".xlsx", ".xlsm", ".xlsb", ".pptx", ".png", ".jpg"}
+
+
+def is_reading(path):
+    """Code and skill text: what the owner reads first. Tests and data stay folded."""
+    return not (is_test(path) or path.startswith(DATA_DIRS) or Path(path).suffix.lower() in DATA_SUFFIXES)
+
+
 def mentions(hunk, names):
     text = "\n".join(l for l in hunk["lines"] if l[:1] in "+-")
     return bool((touched(hunk) | set(hunk["outer"])) & set(names)) or any(re.search(rf"\b{re.escape(n)}\b", text)
@@ -500,12 +509,16 @@ def place(path):
             by_file.setdefault(f["path"], []).append(h)
         if not by_file:
             continue
-        blocks = "".join(diff_html(p, sorted(hs, key=lambda h: h["span"]))
-                         for p, hs in sorted(by_file.items(), key=lambda i: is_test(i[0])))
-        block = Token("html_block", "", 0)
-        block.content = (f"<details class=dx><summary>diff: {sum(changed(h) for hs in by_file.values() for h in hs)}"
-                         f" lines</summary>{blocks}</details>")
-        out.append(block)
+        for opened in (True, False):
+            group = {p: hs for p, hs in by_file.items() if is_reading(p) == opened}
+            if not group:
+                continue
+            blocks = "".join(diff_html(p, sorted(hs, key=lambda h: h["span"])) for p, hs in sorted(group.items()))
+            block = Token("html_block", "", 0)
+            block.content = (f"<details class=dx{' open' if opened else ''}><summary>diff: "
+                             f"{sum(changed(h) for hs in group.values() for h in hs)} lines"
+                             f"{'' if opened else ' (tests and data)'}</summary>{blocks}</details>")
+            out.append(block)
     return out, files, set(best), raw.split("\n", 1)[0].removeprefix("# head ")[:8]
 
 
@@ -761,8 +774,9 @@ tr[data-pr]>td,tr.wt summary{transition:background 1s}tr.fresh>td,summary.fresh{
 </style>"""
 
 SCRIPT = """<button id=foldfix></button><button id=folddiff></button><script>
-// Open sections are remembered per page: each <details> is keyed by its summaries' text, outermost first,
-// plus how many earlier sections share that text.
+// Sections the user opened or closed are remembered per page, against how the page first draws them (code diffs
+// open, the rest folded). Each <details> is keyed by its summaries' text, outermost first, plus how many earlier
+// sections share that text.
 const store = "open:" + location.pathname;
 let keyed = new Map();
 const label = d => [...(d.querySelector(":scope>summary")?.childNodes || [])]
@@ -771,18 +785,25 @@ function reopen() {
   const seen = {};
   keyed = new Map();
   for (const d of document.querySelectorAll("details")) {
+    d.dataset.dflt ??= d.open ? "1" : "";
     const names = [];
     for (let e = d; e; e = e.parentElement.closest("details")) names.unshift(label(e));
     const name = names.join(" / ");
     seen[name] = (seen[name] || 0) + 1;
     keyed.set(d, `${name} #${seen[name]}`);
   }
-  const remembered = new Set(JSON.parse(localStorage.getItem(store) || "[]"));
-  for (const [d, key] of keyed) if (remembered.has(key)) d.open = true;
+  let saved = JSON.parse(localStorage.getItem(store) || "{}");
+  if (Array.isArray(saved)) saved = Object.fromEntries(saved.map(k => [k, true]));
+  for (const [d, key] of keyed) if (key in saved) d.open = saved[key];
 }
 reopen();
 document.addEventListener("toggle", () => {
-  localStorage.setItem(store, JSON.stringify([...keyed].filter(([d]) => d.open).map(([, key]) => key)));
+  let saved = JSON.parse(localStorage.getItem(store) || "{}");
+  if (Array.isArray(saved)) saved = Object.fromEntries(saved.map(k => [k, true]));
+  for (const [d, key] of keyed) {
+    if (d.open === !!d.dataset.dflt) delete saved[key]; else saved[key] = d.open;
+  }
+  localStorage.setItem(store, JSON.stringify(saved));
   placeFold();
 }, true);
 
