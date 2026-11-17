@@ -53,8 +53,8 @@ how the tests use a temporary one.
 
 prints the holder (who, host, pid, since when, last heartbeat, how many minutes it has
 held, its purpose), whether it was abandoned, and each session waiting, in order. When
-the holder is stale it also says whether an automation Excel is still running, which
-blocks recovery.
+the holder is stale it also says which automation Excels are running (recovery ends
+them first), or that the Excel check failed, which blocks recovery.
 
 ## Rules
 
@@ -65,15 +65,17 @@ blocks recovery.
   and the wait for its result together, e.g.
   `excel_queue.py run --purpose "esr native <what>" -- bash -c 'id=$(esr-dev native run ... | <run id>) && esr-dev native wait "$id"'`.
   The turn is held from WSL while the job runs on Windows. If the launching session
-  dies, its turn goes stale, but it is never broken while the job's automation Excel is
-  still running (owner 2026-11-12: esr itself does not take turns).
+  dies, its turn goes stale, and once that is confirmed the queue ends the job's
+  automation Excel and breaks the lock (owner 2026-11-17; esr itself does not take
+  turns, owner 2026-11-12).
 - Never start Excel outside a turn.
 - Never edit or delete anything in the queue folder. The script keeps it: any waiter
   removes a ticket whose heartbeat is confirmed stopped, only the first in line breaks a
   stale lock, and a broken lock is kept as `stale-<utc>-<id>/` with a line in `queue.log`.
 - To clear a lock by hand, use only `release --stale-only`: it breaks a lock only when
-  its holder has been silent for 10 minutes and no automation Excel is running. When
-  one is, it says so and breaks nothing: end that Excel (Task Manager) or wait.
+  its holder has been silent for 10 minutes, ending any automation Excel still running
+  first. When one cannot be ended, it says why and breaks nothing: end that Excel in
+  Task Manager, then release again.
 - Run the script from the dev-skills checkout; edit it only here, in this repository,
   with its tests. There is no installed copy.
 
@@ -89,12 +91,16 @@ blocks recovery.
 - A WSL job can start a Windows process that outlives its group. So after a
   signal-driven shutdown `run` checks for a running automation Excel; if one is alive,
   or the check fails, it leaves the lock in place with `"abandoned": "<reason>"` in
-  `holder.json`, stops its heartbeat and exits. The lock goes stale, and recovery waits
-  until that Excel is gone.
-- A stale lock is never broken while an automation Excel (an `EXCEL.EXE` whose command
-  line has `/automation`, i.e. COM-started; the owner's own Excel windows don't count)
-  is running, or when the check cannot run: recovery fails closed. The refusal is
-  printed and logged once per holder per session.
+  `holder.json`, stops its heartbeat and exits. The lock goes stale, and recovery ends
+  that Excel before it breaks the lock.
+- A stale lock is broken only after every running automation Excel (an `EXCEL.EXE`
+  whose command line has `/automation`, i.e. COM-started; the owner's own Excel windows
+  are never touched) is ended: once the holder is confirmed stale, the breaker ends each
+  with `taskkill /PID <pid> /F`, logs the pids and the stale holder they were left under,
+  and checks again. When the check cannot run, a `taskkill` fails or an Excel survives,
+  recovery fails closed: nothing is broken, and the refusal is printed and logged once
+  per holder per session. An Excel is never ended for a live holder: the holder's record
+  is compared again just before the `taskkill`.
 - Two breakers cannot displace a fresh holder: every break and every stale-ticket
   removal runs inside the recovery mutex and re-checks the confirmed record there, and a
   lock break compares the record again after the Excel check, just before the rename.
@@ -113,8 +119,8 @@ The queue folder holds:
     recovery/breaker.json     present only during a recovery step: who is breaking, since when.
     stale-<utc>-<id>/         a broken stale lock, its holder.json kept for inspection.
     recovery-dead-<utc>-<id>/ a recovery step whose breaker died mid-step.
-    queue.log                 one line per broken lock, removed ticket, refused break,
-                              abandoned lock and broken recovery step.
+    queue.log                 one line per broken lock, ended automation Excels, removed
+                              ticket, refused break, abandoned lock and broken recovery step.
 
 Each session first writes a ticket and may take the lock only when its ticket is the
 oldest live one. A daemon thread refreshes the session's heartbeats every 30 s, waiting
@@ -127,8 +133,9 @@ to its own last heartbeat, one clock, so no skew.
 
 Recovery (breaking a lock, removing a stale ticket) is serialized by the recovery mutex:
 `os.mkdir(recovery/)` with the breaker's record in it. Inside it the breaker re-reads the
-record it confirmed, compares, checks for a running automation Excel (breaking a lock
-only), compares again, acts, and removes the mutex. A breaker that finds the mutex taken
+record it confirmed, compares, checks for running automation Excels (breaking a lock
+only); if any, it compares again, ends them and checks that none remain; then it
+compares again, acts, and removes the mutex. A breaker that finds the mutex taken
 looks again on its next poll. A mutex is broken (and logged) only after the observer has
 seen the same breaker record unchanged on 90 of its own polls in a row, the rule that
 confirms a stale heartbeat; the record's own time is shown, never trusted, so a breaker
@@ -137,9 +144,10 @@ path disappears only through its holder's release or a rename inside the mutex.
 
 The Excel check is one PowerShell query, `Get-CimInstance Win32_Process -Filter
 "Name='EXCEL.EXE'" | Select ProcessId,CommandLine | ConvertTo-Json`, run as
-`powershell.exe -NoProfile -NonInteractive` and read as JSON. It runs on Windows and WSL
-only; anywhere else it fails, so recovery there refuses. A waiter refused by it rechecks
-every 30 s.
+`powershell.exe -NoProfile -NonInteractive` and read as JSON. An Excel is ended with
+`taskkill /PID <pid> /F` (`taskkill.exe` from WSL); each call has a 20 s timeout. They run
+on Windows and WSL only; anywhere else the check fails, so recovery there refuses. A
+waiter refused rechecks every 30 s.
 
 The deadline is monotonic. The first try is always made; after any wait, the deadline is
 checked before the lock is taken and again before the command starts.
@@ -159,12 +167,14 @@ thread joins the turn it is in; other threads count as other sessions.
   ahead of anyone who arrived up to X earlier. All WSL distros share one VM clock;
   native Windows runs use the Windows clock.
 - SIGKILL of the wrapper cannot be handled: its job may keep running. The heartbeat then
-  stops, and recovery refuses while an automation Excel lives.
+  stops, and once the lock is confirmed stale recovery ends its automation Excel.
+- Ending is by pid: an automation Excel that exits on its own between the check and the
+  `taskkill` makes that `taskkill` fail, and recovery refuses until its next try.
 - The release of a holder already confirmed stale (silent over 10 minutes) is not inside
   the mutex. A lock released and taken again during a breaker's step is left alone
   unless that happens between the breaker's last compare and its rename.
 - On Windows, the kill after the grace period ends only the direct child; the Excel
-  check covers anything left.
+  check, and recovery ending what it finds, cover anything left.
 - A breaker paused mid-step for 90 of an observer's polls loses its mutex; it then
   breaks nothing unless the pause falls between its last compare and its rename.
 
@@ -175,5 +185,5 @@ thread joins the turn it is in; other threads count as other sessions.
 Stdlib unittest: sessions are threads on a temporary queue folder (`EXCEL_QUEUE_DIR`),
 polling every few milliseconds. A crashed or skewed session is played by the file it
 leaves. `run` is exercised as another session runs it, with child Pythons as the job
-(including a grandchild that ignores SIGINT, for the shutdown tests); the Excel check is
-mocked. No Excel, PowerShell or other Windows process is started.
+(including a grandchild that ignores SIGINT, for the shutdown tests); the Excel check and
+`taskkill` are mocked. No Excel, PowerShell, `taskkill` or other Windows process is started.

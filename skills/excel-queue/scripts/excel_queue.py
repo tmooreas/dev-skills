@@ -153,12 +153,35 @@ def live_automation_excels() -> list[int]:
                   if "/automation" in str(p.get("CommandLine") or "").lower())
 
 
+def end_excel(pid: int) -> None:
+    taskkill = "taskkill" if sys.platform == "win32" else "taskkill.exe"
+    try:
+        done = subprocess.run([taskkill, "/PID", str(pid), "/F"], stdin=subprocess.DEVNULL, capture_output=True,
+                              timeout=QUERY_SECONDS)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ExcelQueryError(f"ending automation Excel pid {pid} could not run: {e}") from e
+    if done.returncode != 0:
+        said = (done.stderr or done.stdout).decode("utf-8", "replace").strip()[:200]
+        raise ExcelQueryError(f"ending automation Excel pid {pid} failed (exit {done.returncode}): {said}")
+
+
+def pid_list(pids: list[int]) -> str:
+    return ", ".join(map(str, pids))
+
+
 def excel_blocker() -> str | None:
     try:
         pids = live_automation_excels()
     except ExcelQueryError as e:
         return str(e)
-    return f"automation Excel pids {', '.join(map(str, pids))} are running" if pids else None
+    return f"automation Excel pids {pid_list(pids)} are running" if pids else None
+
+
+def excel_state() -> dict:
+    try:
+        return {"pids": live_automation_excels()}
+    except ExcelQueryError as e:
+        return {"error": str(e)}
 
 
 def observed(record: dict | None, changed: float) -> dict:
@@ -213,7 +236,7 @@ def status(root: Path | None = None) -> dict:
     held = holder.get("ticket") if holder else None
     return {"dir": str(root),
             "holder": {k: v for k, v in holder.items() if k != "seen"} if holder else None,
-            "excel": excel_blocker() if holder and holder["stale"] else None,
+            "excel": excel_state() if holder and holder["stale"] else None,
             "queue": [{k: v for k, v in t.items() if k != "seen"} for t in read_tickets(root) if t["ticket"] != held],
             "stale_locks": sorted(p.name for p in root.glob("stale-*"))}
 
@@ -226,9 +249,8 @@ def short_time(stamp: object) -> str:
     return f"{str(stamp)[:19].replace('T', ' ')}Z" if stamp else "?"
 
 
-def refusal(holder: dict, blocker: str) -> str:
-    return (f"the lock of {describe(holder)} is stale (heartbeat {holder['age']:.0f}s old), but {blocker}; "
-            f"end that Excel (Task Manager) or wait")
+def refusal(holder: dict, reason: str) -> str:
+    return f"the lock of {describe(holder)} is stale (heartbeat {holder['age']:.0f}s old), but {reason}"
 
 
 def format_status(state: dict) -> list[str]:
@@ -241,9 +263,14 @@ def format_status(state: dict) -> list[str]:
              f"holder: {entry(holder, 'started')}{held}" if holder else "holder: none, Excel is free"]
     if holder and holder.get("abandoned"):
         lines.append(f"  abandoned: {holder['abandoned']}")
-    if holder and holder["stale"]:
-        lines.append(f"  {refusal(holder, state['excel'])}" if state["excel"] else
-                     "  stale, and no automation Excel is running: the first waiter breaks it once confirmed")
+    excel = state["excel"] if holder and holder["stale"] else None
+    if excel and "error" in excel:
+        lines.append(f"  {refusal(holder, excel['error'])}")
+    elif excel and excel["pids"]:
+        lines.append(f"  stale, and automation Excel pids {pid_list(excel['pids'])} are running: once it is "
+                     f"confirmed, recovery ends them and breaks the lock (a refusal is logged in {LOG})")
+    elif excel:
+        lines.append("  stale, and no automation Excel is running: the first waiter breaks it once confirmed")
     lines.append(f"waiting: {len(state['queue'])}")
     lines += [f"  {n}. {entry(t, 'arrived')}" for n, t in enumerate(state["queue"], 1)]
     if state["stale_locks"]:
@@ -341,13 +368,41 @@ def unchanged(root: Path, holder: dict) -> bool:
     return current is not None and current["seen"] == holder["seen"]
 
 
+def end_left_excels(root: Path, holder: dict, by: str) -> bool:
+    try:
+        pids = live_automation_excels()
+        if not pids:
+            return True
+        if not unchanged(root, holder):
+            return False
+        ended: list[int] = []
+        failed: str | None = None
+        for pid in pids:
+            try:
+                end_excel(pid)
+                ended.append(pid)
+            except ExcelQueryError as e:
+                failed = failed or f"{e}; end it in Task Manager"
+        if ended:
+            note(root, f"{by} ended automation Excel pids {pid_list(ended)}, left running under the stale lock of "
+                       f"{describe(holder)} (heartbeat {holder['age']:.0f}s old), for: {holder.get('purpose', '?')}")
+        if failed:
+            raise RecoveryRefused(failed)
+        left = live_automation_excels()
+    except ExcelQueryError as e:
+        raise RecoveryRefused(str(e)) from e
+    if left:
+        raise RecoveryRefused(f"automation Excel pids {pid_list(left)} are still running after taskkill; "
+                              f"end them in Task Manager")
+    return True
+
+
 def break_lock(root: Path, holder: dict, by: str, watch: RecoveryWatch) -> bool:
     with recovery(root, by, watch) as entered:
         if not entered or not unchanged(root, holder):
             return False
-        blocker = excel_blocker()
-        if blocker:
-            raise RecoveryRefused(blocker)
+        if not end_left_excels(root, holder, by):
+            return False
         if not unchanged(root, holder):
             return False
         kept = f"stale-{stamp()}"
@@ -674,10 +729,11 @@ def main(argv: list[str] | None = None) -> int:
     turn.add_argument("--timeout", type=float, metavar="SECONDS",
                       help=f"give up after waiting this long and exit {TIMEOUT_EXIT} (default: wait indefinitely)")
     turn.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command to run")
-    release = sub.add_parser("release", help="break the lock of a stale holder")
+    release = sub.add_parser("release", help="break the lock of a stale holder, ending any automation Excel "
+                                              "left running first")
     release.add_argument("--stale-only", action="store_true", required=True,
-                         help="required: only a stale holder's lock is broken, never a live one or one whose "
-                              "automation Excel is still running")
+                         help="required: only a stale holder's lock is broken, never a live one; running "
+                              "automation Excels are ended first, and nothing is broken if one cannot be")
     args = parser.parse_args(argv)
     if args.cmd == "status":
         print("\n".join(format_status(status())), flush=True)

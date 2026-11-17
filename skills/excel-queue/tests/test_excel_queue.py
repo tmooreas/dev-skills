@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -22,7 +23,7 @@ LOADING = importlib.util.spec_from_file_location("excel_queue", SCRIPT)
 Q = importlib.util.module_from_spec(LOADING)
 LOADING.loader.exec_module(Q)
 
-QUERY = Q.live_automation_excels
+QUERY, END = Q.live_automation_excels, Q.end_excel
 RECORD_TIME = "%Y-%m-%dT%H:%M:%S.%fZ"
 NAME_TIME = "%Y%m%dT%H%M%S.%fZ"
 GRANDCHILD = """
@@ -98,7 +99,8 @@ def child(code: int) -> list[str]:
 
 def wrapper(*args: str, excels: str = "[]", grace: float = 30.0) -> list[str]:
     launch = (f"import sys; sys.path.insert(0, {str(SCRIPT.parent)!r}); import excel_queue as Q; "
-              f"Q.live_automation_excels = lambda: {excels}; Q.GRACE_SECONDS = {grace}; "
+              f"Q.live_automation_excels = lambda: {excels}; Q.end_excel = lambda pid: None; "
+              f"Q.GRACE_SECONDS = {grace}; "
               f"sys.exit(Q.main(sys.argv[1:]))")
     return [sys.executable, "-c", launch, *args]
 
@@ -109,6 +111,24 @@ def alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+class Excels:
+    def __init__(self, *pids: int, survive: tuple[int, ...] = (), deny: tuple[int, ...] = ()):
+        self.running = set(pids)
+        self.survive = set(survive)
+        self.deny = set(deny)
+        self.ended: list[int] = []
+
+    def query(self) -> list[int]:
+        return sorted(self.running)
+
+    def end(self, pid: int) -> None:
+        if pid in self.deny:
+            raise Q.ExcelQueryError(f"ending automation Excel pid {pid} failed (exit 1): ERROR: Access is denied.")
+        self.ended.append(pid)
+        if pid not in self.survive:
+            self.running.discard(pid)
 
 
 class Desk:
@@ -153,8 +173,9 @@ class QueueTest(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(self.queue)})
         env.start()
         self.addCleanup(env.stop)
+        self.excels = Excels()
         self.tune(POLL_SECONDS=0.005, HEARTBEAT_SECONDS=0.02, CONFIRM_POLLS=3, EXCEL_RECHECK_SECONDS=0.0,
-                  live_automation_excels=lambda: [])
+                  live_automation_excels=self.excels.query, end_excel=self.excels.end)
 
     def tune(self, **constants):
         for name, value in constants.items():
@@ -268,15 +289,31 @@ class QueueTest(unittest.TestCase):
                          rf"broke the stale lock of ghost \(WSL Ubuntu\) on DESKTOP \(pid 4242\) \(heartbeat 60\ds "
                          rf"old\), for: crashed run; kept as {kept.name}$")
 
-    def test_a_live_holder_is_never_broken(self):
+    def test_a_live_holder_is_never_broken_nor_its_excel_ended(self):
+        self.excels.running.add(4242)
         lock = ghost_holder(self.queue, "live run", heartbeat_ago=540)
-        with contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(Q.QueueTimeout, r"held by ghost \(WSL Ubuntu\) on DESKTOP \(pid 4242\) "
                                                         r"since .* for: live run; place in line 1 of 1$"):
                 with Q.excel_turn("next run", timeout=0.3):
                     self.fail("broke a live holder's lock")
+            self.assertEqual(Q.main(["release", "--stale-only"]), 1)
         self.assertEqual(json.loads((lock / "holder.json").read_text())["purpose"], "live run")
-        self.assertEqual(list(self.queue.glob("stale-*")), [])
+        self.assertEqual((list(self.queue.glob("stale-*")), self.excels.ended, self.excels.running), ([], [], {4242}))
+
+    def test_an_excel_is_not_ended_when_its_holder_beats_again_during_the_check(self):
+        lock = ghost_holder(self.queue, "paused run", heartbeat_ago=601)
+        confirmed = Q.read_holder(self.queue)
+        self.excels.running.add(4242)
+
+        def query():
+            (lock / "holder.json").write_text(ghost("ghost-ticket", "paused run", heartbeat_ago=1))
+            return self.excels.query()
+        with contextlib.redirect_stderr(io.StringIO()), mock.patch.object(Q, "live_automation_excels", query):
+            result = Q.break_lock(self.queue, confirmed, "breaker", Q.RecoveryWatch(self.queue))
+        self.assertEqual((result, self.excels.ended, self.excels.running, lock.exists(),
+                          list(self.queue.glob("stale-*")), (self.queue / "queue.log").exists()),
+                         (False, [], {4242}, True, [], False))
 
     def test_a_live_holder_whose_clock_runs_behind_is_never_broken(self):
         self.tune(CONFIRM_POLLS=40)
@@ -489,32 +526,79 @@ class QueueTest(unittest.TestCase):
             Q.main(["status"])
         self.assertIn("  abandoned: stopped by signal 15 while automation Excel pids 4242", out.getvalue())
 
-    def test_a_running_automation_excel_or_a_failed_check_blocks_every_stale_break(self):
+    def recover(self, root: Path, how: str) -> tuple[Path, int]:
+        lock = ghost_holder(root, "crashed run", heartbeat_ago=601)
+        if how != "waiter":
+            return lock, Q.main(["release", "--stale-only"])
+        try:
+            with Q.excel_turn("next run", timeout=0.3):
+                return lock, 0
+        except Q.QueueTimeout:
+            return lock, Q.TIMEOUT_EXIT
+
+    def test_a_stale_holders_automation_excels_are_ended_before_its_lock_is_broken(self):
+        for how in ("waiter", "release --stale-only"):
+            with self.subTest(how=how):
+                root = self.tmp / f"case-{how[:6]}"
+                excels = Excels(4242, 4343)
+                with mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(root)}), \
+                        mock.patch.object(Q, "live_automation_excels", excels.query), \
+                        mock.patch.object(Q, "end_excel", excels.end), \
+                        contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                    lock, code = self.recover(root, how)
+                (kept,) = root.glob("stale-*")
+                ended, broke = (root / "queue.log").read_text().splitlines()
+                self.assertEqual((code, excels.ended, excels.running, lock.exists()), (0, [4242, 4343], set(), False))
+                self.assertRegex(ended, r" ended automation Excel pids 4242, 4343, left running under the stale lock "
+                                        r"of ghost \(WSL Ubuntu\) on DESKTOP \(pid 4242\) \(heartbeat 60\ds old\), "
+                                        r"for: crashed run$")
+                self.assertRegex(broke, rf" broke the stale lock of ghost .* for: crashed run; kept as {kept.name}$")
+
+    def test_a_stale_break_is_refused_when_an_excel_cannot_be_ended_or_the_check_fails(self):
         failed = Q.ExcelQueryError("the Excel check could not run: no powershell.exe")
-        for n, (query, said) in enumerate(((mock.Mock(return_value=[4242, 4343]),
-                                            "automation Excel pids 4242, 4343 are running"),
-                                           (mock.Mock(side_effect=failed), str(failed)))):
+        cases = (("denied", Excels(4242, deny=(4242,)),
+                  "ending automation Excel pid 4242 failed (exit 1): ERROR: Access is denied.; end it in Task Manager"),
+                 ("survives", Excels(4242, survive=(4242,)),
+                  "automation Excel pids 4242 are still running after taskkill; end them in Task Manager"),
+                 ("check fails", mock.Mock(query=mock.Mock(side_effect=failed), end=mock.Mock(), running={4242}),
+                  str(failed)))
+        for case, excels, said in cases:
             for how in ("waiter", "release --stale-only"):
-                with self.subTest(said=said, how=how):
-                    root = self.tmp / f"case-{n}-{how[:6]}"
+                with self.subTest(case=case, how=how):
+                    root = self.tmp / f"case-{case[:6]}-{how[:6]}"
                     err, out = io.StringIO(), io.StringIO()
                     with mock.patch.dict(os.environ, {"EXCEL_QUEUE_DIR": str(root)}), \
-                            mock.patch.object(Q, "live_automation_excels", query), \
+                            mock.patch.object(Q, "live_automation_excels", excels.query), \
+                            mock.patch.object(Q, "end_excel", excels.end), \
                             contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
-                        lock = ghost_holder(root, "crashed run", heartbeat_ago=601)
-                        if how == "waiter":
-                            with self.assertRaises(Q.QueueTimeout):
-                                with Q.excel_turn("next run", timeout=0.3):
-                                    self.fail("broke a lock while its Excel was running")
-                        else:
-                            self.assertEqual(Q.main(["release", "--stale-only"]), 1)
+                        lock, code = self.recover(root, how)
                         Q.main(["status"])
                     refused = [line for line in err.getvalue().splitlines() if "is stale" in line]
-                    self.assertEqual(len(refused), 1)
-                    self.assertTrue(refused[0].endswith(f"but {said}; end that Excel (Task Manager) or wait"))
-                    self.assertIn(f"but {said}; end that Excel (Task Manager) or wait", out.getvalue())
-                    self.assertEqual((lock.exists(), list(root.glob("stale-*")), (root / "recovery").exists()),
-                                     (True, [], False))
+                    self.assertEqual((code, len(refused)), (Q.TIMEOUT_EXIT if how == "waiter" else 1, 1))
+                    self.assertRegex(refused[0], rf"is stale \(heartbeat 60\ds old\), but {re.escape(said)}$")
+                    self.assertEqual((lock.exists(), list(root.glob("stale-*")), (root / "recovery").exists(),
+                                      excels.running), (True, [], False, {4242}))
+                    shown = (f"but {said}" if case == "check fails" else
+                             "stale, and automation Excel pids 4242 are running: once it is confirmed, recovery ends "
+                             "them and breaks the lock (a refusal is logged in queue.log)")
+                    self.assertIn(shown, out.getvalue())
+
+    def test_ending_an_excel_runs_taskkill_and_fails_closed(self):
+        for platform, command in (("linux", "taskkill.exe"), ("win32", "taskkill")):
+            for code in (0, 128):
+                with self.subTest(platform=platform, code=code):
+                    done = subprocess.CompletedProcess([], code, b"", b'ERROR: The process "4242" not found.' * code)
+                    with mock.patch.object(Q.sys, "platform", platform), \
+                            mock.patch.object(Q.subprocess, "run", return_value=done) as ran:
+                        if code:
+                            self.assertRaisesRegex(Q.ExcelQueryError, r'^ending automation Excel pid 4242 failed '
+                                                                      r'\(exit 128\): ERROR: The process "4242"', END, 4242)
+                        else:
+                            self.assertIsNone(END(4242))
+                    self.assertEqual((ran.call_args[0][0], ran.call_args[1]["timeout"]),
+                                     ([command, "/PID", "4242", "/F"], Q.QUERY_SECONDS))
+        with mock.patch.object(Q.subprocess, "run", side_effect=FileNotFoundError("taskkill.exe")):
+            self.assertRaisesRegex(Q.ExcelQueryError, "^ending automation Excel pid 4242 could not run", END, 4242)
 
     def test_the_excel_check_counts_only_running_automation_excels(self):
         found = [{"ProcessId": 11, "CommandLine": '"C:\\Office\\EXCEL.EXE" /automation -Embedding'},
