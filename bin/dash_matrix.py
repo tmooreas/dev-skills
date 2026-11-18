@@ -51,8 +51,15 @@ class Matrix:
             self.lines[k] = re.sub(r"^\| \d+ \|", f"| {i} |", self.lines[k])
 
     def order_problem(self):
-        scored = [(i, float(m.group(1))) for i, k in enumerate(self.rows(), 1)
-                  if (m := SCORE.search(self.lines[k])) and BOTTOM not in self.lines[k]]
+        """Rows free to merge in any order must fall in score; a row that names a
+        PR above it with "(on #N)" or "after #N" sits where merge order puts it."""
+        above, scored = set(), []
+        for i, k in enumerate(self.rows(), 1):
+            line = self.lines[k]
+            needs = set(re.findall(r"(?:\(on|after) #(\d+)", line))
+            if (m := SCORE.search(line)) and BOTTOM not in line and not needs & above:
+                scored.append((i, float(m.group(1))))
+            above.add(self.pr_of(line))
         for (i, a), (j, b) in zip(scored, scored[1:]):
             if b > a:
                 return f"order: row {j} scores {b} above row {i} at {a}"
