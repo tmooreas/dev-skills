@@ -19,7 +19,8 @@ only EarningsPulse's specifics; generic orchestration policy stays in the skill.
   complete invariant and rewrite once.
 - CI minutes are scarce: run `ep-dev preflight` locally, one PR in CI at a time, and merge
   with `ep-dev merge-when-green N <sha>`.
-- Hard cap: 1,500 changed lines per PR (CLAUDE.md; may drop to 800).
+- Hard cap: 400 changed lines per PR, tests and docs included; aim for 250. One bug or one
+  feature per PR, with no side effects (owner, 2026-11-09).
 - Paid calls (extraction, audits, evals) need an owner-approved cap; free read-only SEC
   GETs need `SEC_USER_AGENT` and at most one request per second.
 
