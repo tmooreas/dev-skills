@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Run tools/owner-dash with its own venv, created on first use and refreshed when requirements change.
+# The venv lives under ~/.cache: one inside a /mnt/c checkout fails to build (ensurepip and pip error on drvfs).
 set -eu
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tools/owner-dash" && pwd)"
-venv="$dir/.venv"
+venv="${XDG_CACHE_HOME:-$HOME/.cache}/owner-dash/venv"
 req="$dir/requirements.txt"
 if [ ! -x "$venv/bin/python" ] || ! cmp -s "$req" "$venv/requirements.txt"; then
   python3 -m venv "$venv" >&2

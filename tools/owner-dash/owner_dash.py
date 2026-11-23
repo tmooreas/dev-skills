@@ -9,6 +9,10 @@
     owner-dash show walkthrough 362
     owner-dash approvals                                          (each PR's and brief's latest decision, and whether it is current)
     owner-dash serve [--port 8765]
+    owner-dash watch                                              (copies new approvals into each project's inbox)
+    owner-dash turn                                               (start of a turn: a service down or an approval not acted on)
+    owner-dash ack pr 362                                         (an inbox approval acted on)
+    owner-dash install [--port 8765]                              (serve and watch as systemd user services, plus the omp hook)
 
 Every command takes --project NAME (default: the current git repo's name).
 Files live in $OWNER_DASH_DIR (default ~/.local/share/owner-dash)/<project>/.
@@ -26,6 +30,7 @@ import shutil
 import subprocess
 import sys
 from urllib.parse import parse_qs, quote, unquote
+from urllib.request import urlopen
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -1108,8 +1113,95 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(args):
     ROOT.mkdir(parents=True, exist_ok=True)
+    (ROOT / "serve.json").write_text(json.dumps({"port": args.port}), encoding="utf-8")
     print(f"owner-dash: serving {ROOT} on http://localhost:{args.port}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
+
+
+def watch(args):
+    """Copy each project's new approval rows into its inbox.jsonl until acked. A per-project cursor survives restarts;
+    a project seen for the first time starts at its current end, so history is not replayed. Chat approvals are recorded
+    by the orchestrator itself and are skipped."""
+    while True:
+        for log in ROOT.glob("*/approvals.jsonl"):
+            lines, cursor = log.read_text(encoding="utf-8").splitlines(), log.with_name("watch.cursor")
+            seen = int(cursor.read_text()) if cursor.is_file() else len(lines)
+            new = [line for line in lines[seen:] if json.loads(line).get("via") != "chat"]
+            if new:
+                with log.with_name("inbox.jsonl").open("a", encoding="utf-8") as inbox:
+                    inbox.writelines(line + "\n" for line in new)
+                print(f"owner-dash: {log.parent.name}: {len(new)} new approval row(s)", flush=True)
+            cursor.write_text(str(len(lines)), encoding="utf-8")
+        (ROOT / "watch.heartbeat").write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+        time.sleep(args.every)
+
+
+def turn(args):
+    """One line per thing the orchestrator must act on before anything else: the dashboard or the watcher down, or an
+    approval in the inbox not yet acted on. Prints nothing when all is well or the project has no dashboard."""
+    if not (ROOT / args.project).is_dir():
+        return
+    out, served = [], ROOT / "serve.json"
+    port = json.loads(served.read_text(encoding="utf-8"))["port"] if served.is_file() else 8765
+    try:
+        urlopen(f"http://localhost:{port}/", timeout=3).close()
+    except OSError as e:
+        out.append(f"owner-dash: the dashboard is not answering on :{port} ({e}); systemctl --user restart owner-dash")
+    beat = ROOT / "watch.heartbeat"
+    if not beat.is_file() or time.time() - beat.stat().st_mtime > 60:
+        out.append("owner-dash: the approval watcher is not running; systemctl --user restart owner-dash-watch")
+    inbox = ROOT / args.project / "inbox.jsonl"
+    for line in inbox.read_text(encoding="utf-8").splitlines() if inbox.is_file() else []:
+        d = json.loads(line)
+        out.append(f"owner-dash: the owner chose {d['action']} for {d['kind']} {d['name']} at {d['version']} ({d['at']}); "
+                   f"act on it, then: owner-dash --project {args.project} ack {d['kind']} {d['name']}")
+    print("\n".join(out), end="\n" if out else "")
+
+
+def ack(args):
+    inbox = ROOT / args.project / "inbox.jsonl"
+    rows = inbox.read_text(encoding="utf-8").splitlines() if inbox.is_file() else []
+    keep = [r for r in rows if (json.loads(r)["kind"], json.loads(r)["name"]) != (args.kind, args.name)]
+    if len(keep) == len(rows):
+        sys.exit(f"owner-dash: no inbox approval for {args.kind} {args.name}")
+    inbox.write_text("".join(r + "\n" for r in keep), encoding="utf-8")
+    print(f"owner-dash: acked {args.kind} {args.name}; {len(keep)} left in the inbox")
+
+
+UNIT = """[Unit]
+Description={description}
+
+[Service]
+ExecStart={command}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def install(args):
+    """`serve` and `watch` as systemd user services (start at boot with linger, restart on failure), and the omp hook that
+    runs `turn` at the start of every main-session turn and every minute while the session is open."""
+    here, units = Path(__file__).resolve().parent, Path.home() / ".config/systemd/user"
+    command = here.parent.parent / "bin" / "owner-dash"
+    units.mkdir(parents=True, exist_ok=True)
+    (units / "owner-dash.service").write_text(
+        UNIT.format(description="Owner dashboard", command=f"{command} serve --port {args.port}"), encoding="utf-8")
+    (units / "owner-dash-watch.service").write_text(
+        UNIT.format(description="Owner dashboard approval watcher", command=f"{command} watch"), encoding="utf-8")
+    hook = Path.home() / ".omp/agent/hooks/pre/owner-dash-turn.ts"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(f'export {{ default }} from "{here / "omp_turn_hook.ts"}";\n', encoding="utf-8")
+    for cmd in (["systemctl", "--user", "daemon-reload"],
+                ["systemctl", "--user", "enable", "--now", "owner-dash.service", "owner-dash-watch.service"]):
+        subprocess.run(cmd, check=True)
+    print(f"owner-dash: services enabled (dashboard on :{args.port}); omp hook at {hook}")
+    linger = subprocess.run(["loginctl", "show-user", environ["USER"], "-p", "Linger", "--value"],
+                            capture_output=True, text=True).stdout.strip()
+    if linger != "yes":
+        print(f"owner-dash: linger is off, so the services stop at logout; run: sudo loginctl enable-linger {environ['USER']}")
 
 
 def record(project, kind, name, seen, action, via):
@@ -1151,6 +1243,13 @@ def main():
         p.add_argument("kind", choices=(*KINDS, "matrix"))
         p.add_argument("rest", nargs="*")
     sub.add_parser("serve").add_argument("--port", type=int, default=8765)
+    sub.add_parser("watch").add_argument("--every", type=int, default=10)
+    sub.add_parser("turn", help="what to act on before anything else this turn; silent when all is well")
+    p_ack = sub.add_parser("ack", help="an inbox approval has been acted on")
+    p_ack.add_argument("kind", choices=("pr", "brief"))
+    p_ack.add_argument("name")
+    sub.add_parser("install", help="serve and watch as systemd user services, and the omp turn hook").add_argument(
+        "--port", type=int, default=8765)
     p_put.add_argument("--attach", action="append", default=[], help="file shown with a walkthrough (repeatable)")
     p_show.set_defaults(attach=[])
     sub.add_parser("check", help="refetch a posted walkthrough's diff and run its checks").add_argument("n")
@@ -1161,8 +1260,9 @@ def main():
     p_rec.add_argument("name")
     args = parser.parse_args()
     args.project = args.project or default_project()
-    if args.command == "serve":
-        return serve(args)
+    commands = {"serve": serve, "watch": watch, "turn": turn, "ack": ack, "install": install}
+    if args.command in commands:
+        return commands[args.command](args)
     if args.command == "approvals":
         return list_approvals(args)
     if args.command == "record":

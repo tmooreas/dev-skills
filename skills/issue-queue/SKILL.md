@@ -19,7 +19,7 @@ fill a quota or begin implementation without authorization.
 
 Read the project's instructions, agreed product goal, architecture plan, review
 standards and latest owner decisions/deferrals. Use [review-pr](../review-pr/SKILL.md)
-for the shared seven questions and evidence standard; do not maintain a second
+for the shared eight questions and evidence standard; do not maintain a second
 checklist here. Use [tracker](../tracker/SKILL.md) for dispatch, role bounds,
 PASS-only owner queues and merge authority. Neither issue selection nor a skill
 invocation approves a PR, source change, deployment or production action.

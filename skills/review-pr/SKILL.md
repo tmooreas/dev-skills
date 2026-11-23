@@ -75,7 +75,7 @@ two rounds (initial review plus scoped fix verification), subject to explicit
 project/task bounds. If the approach still violates the invariant, stop patching
 and return the full invariant/finding list; never automatically spin more rounds.
 
-## 0. Context before code: seven questions
+## 0. Context before code: eight questions
 
 Open the verdict with concrete answers:
 1. Is the proposed behavior right for the customer, not just the ticket?
@@ -89,6 +89,16 @@ Open the verdict with concrete answers:
    new logic from lines only moved; moving code is not all new design.
 7. Does it fit the project's target architecture? Classify target shape,
    neutral existing debt, or new debt the target must undo; cite the contract.
+8. **Does the diff do exactly what was asked, no less and no more, and is every new
+   line needed?** (owner 2026-11-23). Answer against the owner's request verbatim,
+   which the review brief carries; without it the verdict is NOT_REVIEWED. List each
+   part of the request the diff misses, each change it makes that was not asked, and
+   each new line that could go. A miss or an unasked change blocks; a removable line
+   is a finding.
+
+A change to a house default or to a question the product asks its user also needs
+the before/after table over the project's corpus of real deals (tracker); without it
+the verdict is NOT_REVIEWED.
 
 Read the full PR body, linked issue and all review/decision history. Match every
 acceptance criterion. Fix verification starts with prior findings. Verify

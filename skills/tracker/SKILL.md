@@ -164,6 +164,13 @@ text when the runtime supports messages. Do not export unrelated/private payload
   commit, checks a value worked out independently, and kills a mutant of the decision
   it guards; review-pr's red flags (no parsers, no shims); the real smoke at the
   pushed head.
+- **A change to a house default or to a question the product asks its user is proven
+  against the project's corpus of real deals before the PR goes out** (owner
+  2026-11-23, after esr #94 was reversed by #100). Its brief says: "re-run the
+  deal-team files and show the before/after table". The table (each corpus file, the
+  result at base and at head, and why each one moved) goes in the PR body, or on the
+  owner dashboard as a report when the project's figures are confidential. The project
+  adapter names the corpus and how to run it.
 - **Every handoff brief is approved by the owner before launch** (owner
   2026-10-06). Show the brief itself: the owner's words it serves, the existing
   code it extends or replaces (file:line), the concrete design, what is out of
@@ -226,7 +233,8 @@ box that crashed out of memory on 2026-10-08).
   RESUME section in its result file: branch, head, worktree, done, left, the next
   command. The orchestrator ledgers a RESUME entry: main's sha, lanes in flight,
   approvals awaited, open owner questions, background jobs to restart. After boot,
-  restart the approval watcher first, then relaunch lanes from their RESUME sections.
+  run `owner-dash turn` first (the dashboard and its watcher are services and restart
+  themselves), then relaunch lanes from their RESUME sections.
 
 ## Context discipline
 
@@ -273,6 +281,11 @@ A synthetic boundary scenario must be labeled as such, not a real future event.
 
 - PASS requires all named acceptance and required QA, independently reviewed at
   the exact current head. Read the final verdict, signer, time and head.
+- **The reviewer's brief carries the owner's request verbatim**, the words as given,
+  never a paraphrase, and asks review-pr's scope question: does the diff do exactly
+  what was asked, no less and no more, and is every new line needed? (owner
+  2026-11-23: "The GPT reviewers passed #635, #636 and #616, which were exactly your
+  three catches"; the question aims their time at what the orchestrator caught by hand.)
 - BLOCKED names an observed defect or hard gate with evidence and an actionable
   owner handoff. Missing mandatory proof without an observed defect is
   NOT_REVIEWED, not a fabricated failure or PASS. Explicitly deferred work has
@@ -359,17 +372,19 @@ and ledger every approval you act on.
 - **An approved PR gets no new commits** beyond that carry-over. A follow-up change,
   even one the owner asks for while approving, is its own PR, stacked if it needs the
   first (e.g. DPA #503 approved, its relabel became #518).
-- **Watch for approvals without being asked** (owner 2026-11-02): keep a background job
-  that exits when `approvals.jsonl` gains a row and prints the new rows. Act on each (a
-  PR approved at `current`: run the merge gate; a brief: launch it), then start the
-  watcher again. One shape:
-
-  ```sh
-  F=~/.local/share/owner-dash/<p>/approvals.jsonl; n=$(wc -l < "$F")
-  while [ "$(wc -l < "$F")" -le "$n" ]; do sleep 10; done; sleep 60; tail -n +$((n+1)) "$F"
-  ```
-
-  The final sleep collects a burst of clicks into one wake-up.
+- **Check the dashboard and approvals at the start of every turn** (owner 2026-11-23:
+  "dash down", "r u not tracking?" and the post-restart pings go away). The dashboard
+  (`owner-dash serve`) and the approval watcher (`owner-dash watch`) run as systemd
+  user services that start at boot and restart on failure, installed once with
+  `bin/owner-dash install --port <port>` (README). The watcher copies each new
+  dashboard approval into the project's inbox; `owner-dash turn` prints one line per
+  thing to act on first: a service down (with the restart command) or an inbox
+  approval. On omp the installed hook runs `turn` before every prompt and every minute
+  while the session is open, and starts a turn when something appears; elsewhere, run
+  `owner-dash --project <p> turn` as the turn's first command. Act on each approval (a
+  PR approved at `current`: run the merge gate; a brief: launch it), then
+  `owner-dash --project <p> ack pr <N>` (or `brief <name>`). Never start a session
+  watcher loop in its place.
 
 ## Reporting and merge queue
 
