@@ -418,11 +418,19 @@ def is_test(path):
 
 DATA_DIRS = ("dev/evals/chat/frozen/",)
 DATA_SUFFIXES = {".csv", ".json", ".jsonl", ".parquet", ".xlsx", ".xlsm", ".xlsb", ".pptx", ".png", ".jpg"}
+TEXT_SUFFIXES = {".md", ".txt", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".rst", ".lock"}
+
+
+def is_skill(path):
+    return "skills" in Path(path).parts or Path(path).name == "SKILL.md"
 
 
 def is_reading(path):
-    """Code and skill text: what the owner reads first. Tests and data stay folded."""
-    return not (is_test(path) or path.startswith(DATA_DIRS) or Path(path).suffix.lower() in DATA_SUFFIXES)
+    """Code and skill text: what the owner reads first. Tests, data, docs, specs and dumps stay folded (owner
+    2026-11-25: "minimize the diffs that i am not possibly going to review.. leave the code and skill changes")."""
+    suffix = Path(path).suffix.lower()
+    return not (is_test(path) or path.startswith(DATA_DIRS) or suffix in DATA_SUFFIXES
+                or (suffix in TEXT_SUFFIXES and not is_skill(path)))
 
 
 def mentions(hunk, names):
@@ -522,7 +530,7 @@ def place(path):
             block = Token("html_block", "", 0)
             block.content = (f"<details class=dx{' open' if opened else ''}><summary>diff: "
                              f"{sum(changed(h) for hs in group.values() for h in hs)} lines"
-                             f"{'' if opened else ' (tests and data)'}</summary>{blocks}</details>")
+                             f"{'' if opened else ' (not code: tests, data, docs, specs)'}</summary>{blocks}</details>")
             out.append(block)
     return out, files, set(best), raw.split("\n", 1)[0].removeprefix("# head ")[:8]
 
