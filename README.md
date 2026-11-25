@@ -75,8 +75,8 @@ keeping open sections and the scroll; it waits while an approval is being saved.
 or at a new head, and walkthroughs newly ready to approve, are marked until hovered, clicked or on screen
 for 4 s; what was seen is kept in the browser's localStorage per PR and head.
 `bin/owner-dash install --port <port>` runs the dashboard (`serve`) and the approval watcher (`watch`) as systemd
-user services that start at boot and restart on failure (WSL needs `systemd=true` in `/etc/wsl.conf` and linger on,
-which `install` checks), and installs an omp hook in `~/.omp/agent/hooks/pre/`. The watcher copies each new dashboard
+user services that start at boot and restart on failure (WSL needs `systemd=true` in `/etc/wsl.conf`; `install` turns
+linger on itself, no sudo where polkit allows it, and works from a shell with no user bus), and installs an omp hook in `~/.omp/agent/hooks/pre/`. The watcher copies each new dashboard
 approval into `<project>/inbox.jsonl`. `owner-dash turn` prints one line per thing the orchestrator must act on
 first, a service down or an inbox approval, and nothing when all is well; the hook runs it before every main-session
 prompt and every minute, and starts a turn when something appears. `owner-dash ack pr|brief <N|name>` clears an

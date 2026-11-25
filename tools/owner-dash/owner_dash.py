@@ -35,7 +35,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from os import environ
+from os import environ, getuid
 from pathlib import Path
 
 from markdown_it import MarkdownIt
@@ -1202,14 +1202,20 @@ def install(args):
     hook = Path.home() / ".omp/agent/hooks/pre/owner-dash-turn.ts"
     hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text(f'export {{ default }} from "{here / "omp_turn_hook.ts"}";\n', encoding="utf-8")
+    user = environ["USER"]
+    if subprocess.run(["loginctl", "enable-linger", user]).returncode:
+        sys.exit(f"owner-dash: could not turn on linger, so the services would stop at logout; run: "
+                 f"sudo loginctl enable-linger {user}, then install again")
+    run_dir = Path(f"/run/user/{getuid()}")
+    for _ in range(20):
+        if (run_dir / "bus").exists():
+            break
+        time.sleep(0.5)
+    env = {"XDG_RUNTIME_DIR": str(run_dir), "DBUS_SESSION_BUS_ADDRESS": f"unix:path={run_dir / 'bus'}", **environ}
     for cmd in (["systemctl", "--user", "daemon-reload"],
                 ["systemctl", "--user", "enable", "--now", "owner-dash.service", "owner-dash-watch.service"]):
-        subprocess.run(cmd, check=True)
-    print(f"owner-dash: services enabled (dashboard on :{args.port}); omp hook at {hook}")
-    linger = subprocess.run(["loginctl", "show-user", environ["USER"], "-p", "Linger", "--value"],
-                            capture_output=True, text=True).stdout.strip()
-    if linger != "yes":
-        print(f"owner-dash: linger is off, so the services stop at logout; run: sudo loginctl enable-linger {environ['USER']}")
+        subprocess.run(cmd, check=True, env=env)
+    print(f"owner-dash: services enabled (dashboard on :{args.port}), linger on; omp hook at {hook}")
 
 
 def record(project, kind, name, seen, action, via):
